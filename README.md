@@ -21,7 +21,7 @@
 | 화면 | HTML/CSS/JavaScript | 자원 조회, 요청 등록, 대안 확인 및 수락 |
 | 협업 | GitHub | 소스 버전 관리 및 변경 검토 |
 
-## 현재 구조
+## v0.1 현재 구조
 
 ```text
 AIDC-Workload-Matcher/
@@ -30,19 +30,32 @@ AIDC-Workload-Matcher/
 ├── .gitignore
 ├── .env.example
 ├── requirements.txt
+├── pytest.ini
 ├── docs/
 │   ├── requirements.md
 │   ├── architecture.md
 │   └── decisions.md
 ├── database/
-│   └── README.md
+│   ├── README.md
+│   ├── __init__.py
+│   ├── schema.sql
+│   ├── seed.sql
+│   ├── erd.md
+│   └── initialize.py
 ├── app/
-│   └── README.md
+│   ├── README.md
+│   ├── __init__.py
+│   └── db.py
 └── tests/
-    └── README.md
+    ├── README.md
+    ├── conftest.py
+    ├── test_db_config.py
+    └── test_mysql_schema.py
 ```
 
-현재는 문서와 디렉터리만 구성한 초기 단계입니다. MySQL 테이블, DB 연결 코드, Flask 실행 진입점과 기능, 테스트 코드는 아직 구현하지 않았습니다.
+v0.1은 고객·GPU 모델·서버·개별 GPU·원본 요청·원본 요구조건의 6개 테이블 SQL과 가상 seed, [Mermaid ERD 및 컬럼 설명](database/erd.md), 최소 MySQL 연결 코드 및 pytest를 제공합니다.
+원본 요청과 요구조건의 변경·삭제는 DB 트리거로 차단합니다. SQL 제공과 실제 DB 적용은 구분하며 DB가 준비되지 않은 환경에서는 SQL을 실행하지 않습니다.
+Flask 실행 진입점, 웹 UI, 매칭·대안 생성·할당 기능은 아직 구현하지 않았습니다.
 
 ## 개발 환경 준비
 
@@ -55,14 +68,25 @@ Copy-Item .env.example .env
 ```
 
 `.env`는 로컬에서만 값을 채우고 커밋하지 않습니다. 예시 파일에는 실제 접속 정보나 비밀값을 넣지 않습니다.
-환경변수 로딩과 Flask 실행은 후속 구현 단계에서 연결합니다. 현재 설치 과정은 MySQL 테이블을 생성하지 않습니다.
+`.env`와 프로세스 환경변수에서 MySQL 접속 정보를 읽습니다. 누락된 접속 정보는 추측하지 않습니다. 의존성 설치만으로 테이블은 생성되지 않습니다.
+
+```powershell
+# Read-only connection check (requires configured MYSQL_* variables)
+.\.venv\Scripts\python.exe -m app.db
+
+# Local tests; live MySQL tests are explicitly skipped by default
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+MySQL 8.0.16 이상이 필요하며, 이번 의존성 설치와 로컬 테스트는 Python 3.14에서 확인했습니다. 지원 대상으로 둔 다른 Python 버전은 아직 실행 검증하지 않았습니다.
+새 빈 DB에 적용하는 방법과 별도 테스트 DB 준비는 [DB 안내](database/README.md), 실제 통합 테스트 실행은 [테스트 안내](tests/README.md)를 따릅니다.
 
 ## 개발 방향
 
-1. 요구사항과 개념적 데이터 모델을 검토하고 ERD 및 무결성 제약을 설계합니다.
-2. MySQL 스키마와 가상 초기 데이터를 설계합니다.
-3. 자원 조회, 원본 요청 저장, 실행 가능성 판단을 구현합니다.
-4. 대안 제시·수락 및 트랜잭션 기반 자원 배정을 구현합니다.
+1. MySQL 환경을 준비해 v0.1 스키마·seed를 적용하고 실제 무결성 통합 테스트를 실행합니다.
+2. 원본 요청과 요구조건의 동일 트랜잭션 저장 및 자원 조회를 구현합니다.
+3. 대안·고객 동의·할당 이력·실행 상태 테이블과 실행 가능성 판단을 구현합니다.
+4. 대안 제시·수락 및 재검증·트랜잭션 기반 자원 배정을 구현합니다.
 5. 시뮬레이션과 화면을 연결하고 동시 배정 및 조건 보존을 검증합니다.
 
 상세 기능은 [요구사항](docs/requirements.md), 계층과 처리 흐름은 [아키텍처](docs/architecture.md), 설계 근거는 [설계 결정](docs/decisions.md)에 기록합니다.

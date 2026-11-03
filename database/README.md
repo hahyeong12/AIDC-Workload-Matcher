@@ -5,6 +5,7 @@
 - [schema.sql](schema.sql): 6개 테이블과 원본 보존 트리거 4개. DB 생성·삭제·초기화 명령은 없다.
 - [seed.sql](seed.sql): 가상 고객 3명, 모델 2개, 서버 4대, 개별 GPU 10개, 요청·요구조건 각 5건.
 - [initialize.py](initialize.py): 명시적으로 선택한 비어 있는 DB에만 SQL을 적용하는 선택적 CLI.
+- [inspect_schema.py](inspect_schema.py), [recover.py](recover.py): 읽기 전용 점검과 누락 트리거만 추가하는 복구 도구. 실제 오류 분석과 관리자 실행 절차는 [부분 스키마 복구 안내](../docs/mysql-recovery.md)를 따른다.
 
 ## 실행 전 조건
 
@@ -39,6 +40,7 @@
 이 CLI는 프로젝트의 고정 SQL 파일만 분할 실행하며, 복합 트리거 본문이나 SQL 문자열 내부 세미콜론을 처리하는 범용 SQL 실행기가 아니다. SQL 형식 확장 시 분할 방식을 함께 변경한다.
 
 같은 DB에 재실행하면 중단한다. `IF NOT EXISTS`, `INSERT IGNORE`, `REPLACE`, 기존 행을 갱신하는 upsert를 사용하지 않는다.
+실패 시 단계·DB 객체명·MySQL 오류 번호·SQLSTATE를 출력한다. 테이블 생성 후 트리거에서 실패했다면 전체 초기화를 반복하지 말고 복구 도구로 점검한다. Binary Logging 권한 문제로 관리자가 트리거를 만들어야 하는 새 DB에는 `--tables-only`로 테이블만 준비할 수 있으며 트리거·seed는 설치되지 않는다.
 seed INSERT는 하나의 트랜잭션에서 실행하며 실패하면 seed 전체를 롤백한다. `seed.sql`을 다른 도구로 실행한다면 호출자가 동일한 트랜잭션과 오류 시 롤백을 보장해야 한다.
 스키마 DDL은 암묵적 커밋이 발생하므로 중간 오류 시 일부 테이블이 남을 수 있다. 자동 삭제나 재생성 없이 중단하므로 상태를 확인하고 별도 마이그레이션을 검토한다. 적용 중에는 다른 세션에서 같은 DB의 DDL을 수행하지 않는다.
 

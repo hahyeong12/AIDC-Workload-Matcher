@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.db import DatabaseConfigError, connection_settings, main, require_supported_mysql
+from app.db import DatabaseConfigError, DatabaseOperationError, connection_settings, main, require_supported_mysql
 from database.initialize import initialize
 
 
@@ -89,7 +89,7 @@ def test_seed_failure_rolls_back_and_never_resets_database():
         if statement.startswith("INSERT INTO gpu_models"):
             raise RuntimeError("seed failure")
     cursor.execute.side_effect = execute
-    with pytest.raises(RuntimeError, match="seed failure"):
+    with pytest.raises(DatabaseOperationError, match="stage=seed-insert object=gpu_models"):
         initialize(connection)
     connection.rollback.assert_called_once()
     connection.commit.assert_not_called()

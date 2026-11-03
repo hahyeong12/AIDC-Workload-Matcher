@@ -1,7 +1,7 @@
 """Environment-only MySQL connection and a read-only connection check."""
 
 import argparse
-from contextlib import closing
+from contextlib import closing, contextmanager
 from pathlib import Path
 import os
 import re
@@ -15,6 +15,31 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 class DatabaseConfigError(ValueError):
     """Missing or unsafe database configuration (never includes values)."""
+
+
+class DatabaseOperationError(RuntimeError):
+    """Safe diagnostic fields only; never retain connector messages or SQL text."""
+
+    def __init__(self, stage, object_name, error):
+        self.stage = stage if re.fullmatch(r"[a-z_-]+", stage) else "unknown"
+        self.object_name = object_name if re.fullmatch(r"[a-zA-Z0-9_]+", object_name) else "redacted"
+        number = getattr(error, "errno", None)
+        self.errno = number if type(number) is int else None
+        state = getattr(error, "sqlstate", None)
+        self.sqlstate = state if isinstance(state, str) and re.fullmatch(r"[A-Z0-9]{5}", state) else None
+        super().__init__(f"stage={self.stage} object={self.object_name} "
+                         f"errno={self.errno or 'unknown'} SQLSTATE={self.sqlstate or 'unknown'}")
+
+
+@contextmanager
+def database_step(stage, object_name="database"):
+    """Keep diagnostics useful without echoing driver errors or connection values."""
+    try:
+        yield
+    except (DatabaseConfigError, DatabaseOperationError):
+        raise
+    except Exception as exc:
+        raise DatabaseOperationError(stage, object_name, exc) from None
 
 
 def connection_settings(prefix="MYSQL_", environ=None):
@@ -73,7 +98,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
     load_dotenv(PROJECT_ROOT / ".env", override=False)
     try:
-        with closing(connect_database("TEST_MYSQL_" if args.test else "MYSQL_")) as connection:
+        with database_step("connect"):
+            connection = connect_database("TEST_MYSQL_" if args.test else "MYSQL_")
+        with closing(connection), database_step("connection-check"):
             with closing(connection.cursor()) as cursor:
                 cursor.execute("SELECT VERSION(), 1")
                 version, result = cursor.fetchone()
@@ -83,6 +110,8 @@ def main(argv=None):
         print("MySQL connection check passed (read-only; no schema or data changed).")
         return 0
     except DatabaseConfigError as exc:
+        print(str(exc), file=sys.stderr)
+    except DatabaseOperationError as exc:
         print(str(exc), file=sys.stderr)
     except ImportError:
         print("Install requirements.txt before connecting to MySQL.", file=sys.stderr)

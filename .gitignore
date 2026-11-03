@@ -179,3 +179,34 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Local environment variants (keep the sanitized template)
+.env.*
+!.env.example
+.envrc
+
+# Credentials and private keys
+secrets/
+credentials/
+.aws/
+.my.cnf
+.mylogin.cnf
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local database data and exports; schema/seed SQL remains trackable
+database/data/
+database/backups/
+database/dumps/
+*.sql.gz
+*.sql.zip
+*.dump
+
+# Local editor and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini

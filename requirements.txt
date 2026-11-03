@@ -1,0 +1,5 @@
+# Initial dependencies; exact versions will be fixed after compatibility checks.
+Flask
+mysql-connector-python
+python-dotenv
+pytest

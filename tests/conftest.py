@@ -1,12 +1,30 @@
 """Integration tests never create, truncate or delete tables or databases."""
 
 from contextlib import closing
+from pathlib import Path
+import sys
+import tempfile
 from uuid import uuid4
 
 import pytest
 from dotenv import load_dotenv
 
 from app.db import PROJECT_ROOT, connect_database, connection_settings, require_supported_mysql
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_configure(config):
+    """Use a fresh workspace temp path on Windows; never reuse/delete user paths."""
+    if sys.platform != "win32" or config.option.basetemp is not None:
+        return
+    parent = PROJECT_ROOT / ".pytest-tmp"
+    if not parent.resolve().is_relative_to(PROJECT_ROOT):
+        raise pytest.UsageError("Project pytest temporary directory must remain inside the repository")
+    parent.mkdir(exist_ok=True)
+    # pytest clears an existing --basetemp. Reserve a NEW private parent and give
+    # it a child that does not yet exist, so no earlier directory is cleared.
+    run = Path(tempfile.mkdtemp(prefix="run-", dir=parent))
+    config.option.basetemp = str(run / "tmp")
 
 
 def pytest_addoption(parser):

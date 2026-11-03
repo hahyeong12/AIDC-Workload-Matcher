@@ -45,7 +45,8 @@ AIDC-Workload-Matcher/
 │   ├── initialize.py
 │   ├── inspect_schema.py
 │   ├── recover.py
-│   └── admin_missing_triggers.sql
+│   ├── admin_missing_triggers.sql
+│   └── admin_missing_triggers_test.sql
 ├── app/
 │   ├── README.md
 │   ├── __init__.py
@@ -55,7 +56,8 @@ AIDC-Workload-Matcher/
     ├── conftest.py
     ├── test_db_config.py
     ├── test_mysql_schema.py
-    └── test_recovery.py
+    ├── test_recovery.py
+    └── test_temp_config.py
 ```
 
 v0.1은 고객·GPU 모델·서버·개별 GPU·원본 요청·원본 요구조건의 6개 테이블 SQL과 가상 seed, [Mermaid ERD 및 컬럼 설명](database/erd.md), 최소 MySQL 연결 코드 및 pytest를 제공합니다.
@@ -86,6 +88,7 @@ Copy-Item .env.example .env
 MySQL 8.0.16 이상이 필요하며, 이번 의존성 설치와 로컬 테스트는 Python 3.14에서 확인했습니다. 지원 대상으로 둔 다른 Python 버전은 아직 실행 검증하지 않았습니다.
 새 빈 DB에 적용하는 방법과 별도 테스트 DB 준비는 [DB 안내](database/README.md), 실제 통합 테스트 실행은 [테스트 안내](tests/README.md)를 따릅니다.
 테이블만 생성되고 트리거 생성이 실패했다면 전체 초기화를 반복하지 말고 [MySQL 부분 스키마 복구 안내](docs/mysql-recovery.md)를 확인합니다. 기본 점검 명령은 `python -m database.recover`이며 읽기 전용입니다.
+관리자 트리거 생성 후 v0.1 검증을 완료했습니다. 실제 MySQL 통합 테스트 27개를 포함한 전체 pytest는 **82 passed**이며 상세 결과는 [테스트 안내](tests/README.md)에 기록했습니다. Windows 테스트는 실행마다 새 `.pytest-tmp/` 하위 경로를 사용합니다.
 
 ## 개발 방향
 

@@ -20,7 +20,8 @@ def rejected(db, sql, params, errno):
 
     with pytest.raises(mysql.connector.Error) as caught:
         execute(db, sql, params)
-    assert caught.value.errno == errno
+    allowed = (errno,) if isinstance(errno, int) else errno
+    assert caught.value.errno in allowed
     return caught.value
 
 
@@ -75,7 +76,16 @@ def test_foreign_key_rejects_missing_parent(db, sample, relation):
         "requirement_model": ("INSERT INTO job_requirements VALUES (%s, %s, 1, 0)", (sample["job"], missing)),
     }
     sql, params = statements[relation]
-    rejected(db, sql, params, 1452)
+    # MySQL may withhold constraint details for a restricted account (1216).
+    # Both codes denote a missing referenced row; require the integrity SQLSTATE.
+    error = rejected(db, sql, params, (1216, 1452))
+    assert error.sqlstate == "23000"
+    if relation.startswith("gpu_"):
+        assert execute(db, "SELECT gpu_id FROM gpus WHERE asset_tag = %s", (sample["token"] + "x",)) == []
+    elif relation == "job_customer":
+        assert execute(db, "SELECT job_request_id FROM job_requests WHERE customer_id = %s", (missing,)) == []
+    else:
+        assert execute(db, "SELECT job_request_id FROM job_requirements WHERE job_request_id = %s", (params[0],)) == []
 
 
 @pytest.mark.parametrize("count", [0, -1])

@@ -11,12 +11,13 @@ def fingerprint(value):
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
 
 
-def snapshot(connection):
+def snapshot(connection, version="v0.1"):
     result = {}
     with closing(connection.cursor()) as cursor:
         # Names come only from version-controlled schema.sql, never user input.
-        for table in definitions()[0]:
-            cursor.execute(f"SELECT * FROM `{table}` ORDER BY 1")
+        for table in definitions(version)[0]:
+            order = "1, 2" if table == "allocation_gpus" else "1"
+            cursor.execute(f"SELECT * FROM `{table}` ORDER BY {order}")
             rows = cursor.fetchall()
             cursor.execute(f"SHOW CREATE TABLE `{table}`")
             result[table] = {"rows": len(rows), "data_sha256": fingerprint(rows),

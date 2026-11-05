@@ -10,6 +10,7 @@ import pytest
 from dotenv import load_dotenv
 
 from app.db import PROJECT_ROOT, connect_database, connection_settings, require_supported_mysql
+from database.inspect_schema import definitions, inspect, require_matching_tables
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -55,9 +56,9 @@ def mysql_connection():
             cursor.execute("SELECT TABLE_NAME, ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()")
             tables = cursor.fetchall()
             actual = {row[0] for row in tables}
-            expected = {"customers", "gpu_models", "servers", "gpus", "job_requests", "job_requirements"}
+            expected = set(definitions("v0.2-2" if "allocations" in actual else "v0.1")[0])
             if actual != expected:
-                pytest.fail("Initialize the dedicated v0.1 test database before integration tests", pytrace=False)
+                pytest.fail("Test database must have a complete v0.1 or v0.2-2 schema; inspect/migrate first", pytrace=False)
             if any(engine != "InnoDB" for _, engine in tables):
                 pytest.fail("Integration tests require InnoDB rollback safety for every table", pytrace=False)
             cursor.execute("SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE()")
@@ -66,6 +67,10 @@ def mysql_connection():
                                  for operation in ("update", "delete")}
             if triggers != expected_triggers:
                 pytest.fail("Original preservation triggers must be installed before integration tests", pytrace=False)
+        report = inspect(connection)
+        require_matching_tables(report)
+        if not all(item["matches"] for item in report["triggers"].values()):
+            pytest.fail("Original trigger definitions must match", pytrace=False)
         connection.rollback()
         yield connection
 

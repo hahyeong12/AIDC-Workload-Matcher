@@ -7,8 +7,12 @@ from app.db import PROJECT_ROOT, DatabaseConfigError, database_step, require_sup
 from database.initialize import statements, execute, object_name
 
 
-def definitions():
+def definitions(version="v0.1"):
     sql = statements(PROJECT_ROOT / "database" / "schema.sql")
+    if version == "v0.2-2":
+        sql += statements(PROJECT_ROOT / "database" / "migrations" / "002_transactional_allocations.sql")
+    elif version != "v0.1":
+        raise DatabaseConfigError("Unknown schema version")
     return ({object_name(s): s for s in sql if s.startswith("CREATE TABLE")},
             {object_name(s): s for s in sql if s.startswith("CREATE TRIGGER")})
 
@@ -45,7 +49,7 @@ def normalize(text):
     for token in tokens:
         if token.startswith("'"):
             parts.append(token)
-        elif token.lower() == "_utf8mb4":
+        elif token.lower() in ("_utf8mb4", "_ascii"):
             continue
         else:
             parts.append(token.strip("`").lower())
@@ -82,6 +86,10 @@ def table_signature(sql):
         if " check " in item:
             prefix, expr = item.split(" check ", 1)
             item = prefix + " check " + strip_outer(expr)
+        if " generated always as " in item:
+            prefix, expression = item.split(" generated always as ", 1)
+            expression, storage = expression.rsplit(" ", 1)
+            item = prefix + " generated always as " + strip_outer(expression) + " " + storage
         if item.startswith(("primary key ", "unique key ", "key ", "constraint ")):
             constraints.append(item)
         else:
@@ -112,6 +120,11 @@ def inspect(connection):
         execute(cursor, "SELECT TABLE_NAME, ENGINE FROM information_schema.TABLES "
                 "WHERE TABLE_SCHEMA=DATABASE()", "inspect-tables")
         actual = dict(cursor.fetchall())
+        extensions = {"allocations", "allocation_gpus"}
+        present = extensions & actual.keys()
+        report["schema_version"] = "v0.2-2" if present == extensions else "partial-v0.2-2" if present else "v0.1"
+        if present:
+            table_sql, _ = definitions("v0.2-2")
         report["unexpected_tables"] = len(actual.keys() - table_sql.keys())
         for name, expected in table_sql.items():
             row = report["tables"][name] = {"exists": name in actual, "matches": False, "rows": None}
@@ -133,6 +146,8 @@ def inspect(connection):
 def require_matching_tables(report):
     if report["unexpected_tables"] or report["unexpected_triggers"]:
         raise DatabaseConfigError("Unexpected objects found; manual review required")
+    if report.get("schema_version") == "partial-v0.2-2":
+        raise DatabaseConfigError("Partial v0.2-2 migration; use database.migrate --resume after inspection")
     for name, row in report["tables"].items():
         if not row["exists"] or not row["matches"]:
             raise DatabaseConfigError("Table missing or differs from schema.sql: " + name)

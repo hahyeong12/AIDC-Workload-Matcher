@@ -1,6 +1,6 @@
-# v0.1 ERD 및 데이터 사전
+# ERD 및 데이터 사전
 
-MySQL 8.0.16 이상, InnoDB, `utf8mb4`를 사용한다. 모든 컬럼은 `NOT NULL`이다.
+MySQL 8.0.16 이상, InnoDB, `utf8mb4`를 사용한다. v0.1 기본 테이블의 모든 컬럼은 `NOT NULL`이다. v0.2-2의 종료·해제 시각 및 조건부 UNIQUE용 생성 컬럼은 NULL을 허용한다.
 시간은 연결 세션을 UTC로 설정해 저장·조회한다. SQL 명세는 [schema.sql](schema.sql), 가상 데이터는 [seed.sql](seed.sql)에 있다.
 
 ```mermaid
@@ -10,6 +10,10 @@ erDiagram
     servers ||--o{ gpus : contains
     gpu_models ||--o{ job_requirements : requested_model
     job_requests ||--o| job_requirements : has_original_requirement
+    job_requests ||--o{ allocations : execution_history
+    allocations ||--o{ allocation_gpus : assigned_devices
+    gpus ||--o{ allocation_gpus : usage_history
+    servers ||--o{ allocation_gpus : server_at_assignment
 
     customers {
         BIGINT customer_id PK
@@ -49,6 +53,22 @@ erDiagram
         BIGINT gpu_model_id FK
         INT gpu_count
         TINYINT same_server_required
+    }
+    allocations {
+        BIGINT allocation_id PK
+        BIGINT job_request_id FK
+        VARCHAR status
+        TIMESTAMP allocated_at
+        TIMESTAMP ended_at "nullable"
+        BIGINT active_job_request_id UK "generated; nullable"
+    }
+    allocation_gpus {
+        BIGINT allocation_id PK,FK
+        BIGINT gpu_id PK,FK
+        BIGINT server_id FK
+        TIMESTAMP assigned_at
+        TIMESTAMP released_at "nullable"
+        BIGINT active_gpu_id UK "generated; nullable"
     }
 ```
 
@@ -152,3 +172,36 @@ v0.1에는 할당 기록이 없으므로 정상 GPU 수를 **최종 가용 수�
 - [CHECK 제약](https://dev.mysql.com/doc/refman/8.0/en/create-table-check-constraints.html): MySQL 8.0.16부터 CHECK를 실제 강제한다.
 - [트리거 문법](https://dev.mysql.com/doc/refman/8.0/en/trigger-syntax.html): 행 변경 전 트리거로 원본 변경을 거부한다.
 - [암묵적 커밋](https://dev.mysql.com/doc/refman/8.0/en/implicit-commit.html): 일반 CREATE TABLE 등 DDL은 전체 스크립트 롤백이 보장되지 않는다.
+
+## v0.2-2 추가 테이블
+
+정의는 [002_transactional_allocations.sql](migrations/002_transactional_allocations.sql)에 있다. 기존 테이블과 4개 트리거는 변경하지 않는다. 추가 PK 2개·FK 4개를 포함해 총 8개 테이블, FK 9개다.
+
+### allocations
+
+| 컬럼 | SQL 타입 | 의미·제약 |
+| --- | --- | --- |
+| allocation_id | BIGINT UNSIGNED | AUTO_INCREMENT PK |
+| job_request_id | BIGINT UNSIGNED | FK → job_requests, RESTRICT |
+| status | VARCHAR(16), ascii_bin | ACTIVE / COMPLETED / FAILED, 기본 ACTIVE |
+| allocated_at | TIMESTAMP(6) | 배정 시각, UTC, NOT NULL |
+| ended_at | TIMESTAMP(6), NULL | ACTIVE이면 NULL, 종료 상태이면 NOT NULL, allocated_at 이상 |
+| active_job_request_id | BIGINT UNSIGNED, Generated STORED | ACTIVE이면 Job ID, 그 외 NULL; UNIQUE |
+
+같은 Job의 ACTIVE 할당은 최대 한 건이다. 서비스는 현재 Job당 한 실행만 제공하며 반복 호출에 기존 결과를 반환한다. FAILED는 배정 확정 후 실행 실패이고, 배정 전 실패는 이 테이블에 기록하지 않는다.
+
+### allocation_gpus
+
+| 컬럼 | SQL 타입 | 의미·제약 |
+| --- | --- | --- |
+| allocation_id | BIGINT UNSIGNED | 복합 PK 일부, FK → allocations, RESTRICT |
+| gpu_id | BIGINT UNSIGNED | 복합 PK 일부, FK → gpus, RESTRICT |
+| server_id | BIGINT UNSIGNED | 배정 당시 서버 FK → servers, RESTRICT |
+| assigned_at | TIMESTAMP(6) | 배정 시각, UTC, NOT NULL |
+| released_at | TIMESTAMP(6), NULL | 미해제이면 NULL, 해제 시 assigned_at 이상 |
+| active_gpu_id | BIGINT UNSIGNED, Generated STORED | released_at이 NULL이면 GPU ID, 그 외 NULL; UNIQUE |
+
+복합 PK는 `(allocation_id, gpu_id)`다. 같은 GPU의 미해제 행은 UNIQUE로 최대 하나만 허용한다. 해제 후에는 NULL 키를 갖는 과거 행과 새 미해제 행이 공존한다.
+GPU별 이력 인덱스 `(gpu_id, allocation_id)`, 서버 FK 인덱스와 Job별 헤더 인덱스를 둔다.
+Generated Column은 부모 상태를 참조할 수 없으므로 헤더·자식 상태 일치는 배정·반환 서비스의 단일 트랜잭션으로 보장한다. 원본 조건·정확한 수량·동일 서버 조건도 서비스에서 잠금 후 검증한다.
+서비스는 과거 할당·GPU 연결을 삭제하지 않는다. 장비의 현재 서버와 배정 당시 서버는 구분한다.

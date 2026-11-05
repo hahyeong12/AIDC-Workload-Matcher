@@ -21,7 +21,7 @@
 | 화면 | HTML/CSS/JavaScript | 자원 조회, 요청 등록, 대안 확인 및 수락 |
 | 협업 | GitHub | 소스 버전 관리 및 변경 검토 |
 
-## v0.1 현재 구조
+## v0.2-1 현재 구조
 
 ```text
 AIDC-Workload-Matcher/
@@ -35,6 +35,7 @@ AIDC-Workload-Matcher/
 │   ├── requirements.md
 │   ├── architecture.md
 │   ├── decisions.md
+│   ├── v0.2-1-validation.md
 │   └── mysql-recovery.md
 ├── database/
 │   ├── README.md
@@ -50,10 +51,20 @@ AIDC-Workload-Matcher/
 ├── app/
 │   ├── README.md
 │   ├── __init__.py
-│   └── db.py
+│   ├── db.py
+│   ├── matching.py
+│   ├── match_cli.py
+│   ├── repositories/
+│   │   └── hardware.py
+│   └── services/
+│       └── hardware.py
 └── tests/
     ├── README.md
     ├── conftest.py
+    ├── mysql_audit.py
+    ├── test_hardware_matching.py
+    ├── test_match_cli.py
+    ├── test_mysql_matching.py
     ├── test_db_config.py
     ├── test_mysql_schema.py
     ├── test_recovery.py
@@ -62,7 +73,23 @@ AIDC-Workload-Matcher/
 
 v0.1은 고객·GPU 모델·서버·개별 GPU·원본 요청·원본 요구조건의 6개 테이블 SQL과 가상 seed, [Mermaid ERD 및 컬럼 설명](database/erd.md), 최소 MySQL 연결 코드 및 pytest를 제공합니다.
 원본 요청과 요구조건의 변경·삭제는 DB 트리거로 차단합니다. SQL 제공과 실제 DB 적용은 구분하며 DB가 준비되지 않은 환경에서는 SQL을 실행하지 않습니다.
-Flask 실행 진입점, 웹 UI, 매칭·대안 생성·할당 기능은 아직 구현하지 않았습니다.
+v0.2-1은 이 구조를 유지하며 원본 GPU 요구조건에 대한 읽기 전용 하드웨어 매칭을 추가합니다.
+Flask 실행 진입점, 웹 UI, 대안 생성·고객 동의·할당·예약 기능은 후속 범위입니다.
+
+## 하드웨어 조건 검사
+
+```powershell
+.\.venv\Scripts\python.exe -m app.match_cli 001
+.\.venv\Scripts\python.exe -m app.match_cli 003 --test
+```
+
+숫자 Job ID로 MySQL의 원본 요구조건과 해당 모델의 개별 GPU·서버 상태를 조회합니다.
+`ONLINE` 서버의 `HEALTHY` GPU만 집계하고, 동일 서버 필수이면 서버별 수량으로 검사합니다.
+분산 허용이면 한 서버 또는 여러 서버의 수량을 합산합니다. 원본 조건은 변경하지 않습니다.
+
+JSON 결과는 `HARDWARE_FEASIBLE` 또는 `HARDWARE_INSUFFICIENT`이며 설명, 사유 코드, 서버별 수량과 개별 장비를 포함합니다.
+이는 하드웨어 수량·배치 검사 결과입니다. 할당·예약 정보를 검사하지 않으므로 실제 즉시 실행 가능 여부나 배정 확정을 뜻하지 않습니다.
+잘못된 ID, 없는 Job, 원본 요구조건 누락은 별도 오류입니다. 자세한 필드와 종료 코드는 [앱 안내](app/README.md), 검증 결과는 [v0.2-1 검증 기록](docs/v0.2-1-validation.md)을 참고합니다.
 
 ## 개발 환경 준비
 
@@ -93,8 +120,8 @@ MySQL 8.0.16 이상이 필요하며, 이번 의존성 설치와 로컬 테스트
 ## 개발 방향
 
 1. MySQL 환경을 준비해 v0.1 스키마·seed를 적용하고 실제 무결성 통합 테스트를 실행합니다.
-2. 원본 요청과 요구조건의 동일 트랜잭션 저장 및 자원 조회를 구현합니다.
-3. 대안·고객 동의·할당 이력·실행 상태 테이블과 실행 가능성 판단을 구현합니다.
+2. v0.2-1의 하드웨어 조건 검사에 이어 원본 요청과 요구조건의 동일 트랜잭션 저장을 구현합니다.
+3. 대안·고객 동의·할당 이력·실행 상태 테이블과 활성 할당을 반영한 가용성 판단을 구현합니다.
 4. 대안 제시·수락 및 재검증·트랜잭션 기반 자원 배정을 구현합니다.
 5. 시뮬레이션과 화면을 연결하고 동시 배정 및 조건 보존을 검증합니다.
 

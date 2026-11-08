@@ -9,10 +9,12 @@ from database.initialize import statements, execute, object_name
 
 def definitions(version="v0.1"):
     sql = statements(PROJECT_ROOT / "database" / "schema.sql")
-    if version == "v0.2-2":
+    if version in ("v0.2-2", "v0.3-1"):
         sql += statements(PROJECT_ROOT / "database" / "migrations" / "002_transactional_allocations.sql")
     elif version != "v0.1":
         raise DatabaseConfigError("Unknown schema version")
+    if version == "v0.3-1":
+        sql += statements(PROJECT_ROOT / "database" / "migrations" / "003_workload_proposals.sql")
     return ({object_name(s): s for s in sql if s.startswith("CREATE TABLE")},
             {object_name(s): s for s in sql if s.startswith("CREATE TRIGGER")})
 
@@ -125,6 +127,11 @@ def inspect(connection):
         report["schema_version"] = "v0.2-2" if present == extensions else "partial-v0.2-2" if present else "v0.1"
         if present:
             table_sql, _ = definitions("v0.2-2")
+        proposal_tables = {"job_proposals", "proposal_responses"} & actual.keys()
+        if proposal_tables:
+            report["schema_version"] = ("v0.3-1" if len(proposal_tables) == 2 and present == extensions
+                                        else "partial-v0.3-1")
+            table_sql, _ = definitions("v0.3-1")
         report["unexpected_tables"] = len(actual.keys() - table_sql.keys())
         for name, expected in table_sql.items():
             row = report["tables"][name] = {"exists": name in actual, "matches": False, "rows": None}
@@ -148,6 +155,8 @@ def require_matching_tables(report):
         raise DatabaseConfigError("Unexpected objects found; manual review required")
     if report.get("schema_version") == "partial-v0.2-2":
         raise DatabaseConfigError("Partial v0.2-2 migration; use database.migrate --resume after inspection")
+    if report.get("schema_version") == "partial-v0.3-1":
+        raise DatabaseConfigError("Partial v0.3-1 migration; inspect then use database.proposal_migrate --resume")
     for name, row in report["tables"].items():
         if not row["exists"] or not row["matches"]:
             raise DatabaseConfigError("Table missing or differs from schema.sql: " + name)

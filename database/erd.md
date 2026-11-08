@@ -1,6 +1,6 @@
 # ERD 및 데이터 사전
 
-MySQL 8.0.16 이상, InnoDB, `utf8mb4`를 사용한다. v0.1 기본 테이블의 모든 컬럼은 `NOT NULL`이다. v0.2-2의 종료·해제 시각 및 조건부 UNIQUE용 생성 컬럼은 NULL을 허용한다.
+MySQL 8.0.16 이상, InnoDB, `utf8mb4`를 사용한다. v0.1 기본 테이블의 모든 컬럼은 `NOT NULL`이다. 종료·해제 시각과 활성 할당·수락의 조건부 UNIQUE용 생성 컬럼은 NULL을 허용한다.
 시간은 연결 세션을 UTC로 설정해 저장·조회한다. SQL 명세는 [schema.sql](schema.sql), 가상 데이터는 [seed.sql](seed.sql)에 있다.
 
 ```mermaid
@@ -14,6 +14,11 @@ erDiagram
     allocations ||--o{ allocation_gpus : assigned_devices
     gpus ||--o{ allocation_gpus : usage_history
     servers ||--o{ allocation_gpus : server_at_assignment
+    job_requests ||--o{ job_proposals : alternatives
+    gpu_models ||--o{ job_proposals : proposed_model
+    customers ||--o{ job_proposals : original_owner_snapshot
+    job_proposals ||--o| proposal_responses : final_response
+    customers ||--o{ proposal_responses : responds
 
     customers {
         BIGINT customer_id PK
@@ -69,6 +74,28 @@ erDiagram
         TIMESTAMP assigned_at
         TIMESTAMP released_at "nullable"
         BIGINT active_gpu_id UK "generated; nullable"
+    }
+    job_proposals {
+        BIGINT proposal_id PK
+        BIGINT job_request_id FK "condition UK with model, count, placement"
+        BIGINT customer_id FK "original Job owner snapshot"
+        BIGINT gpu_model_id FK
+        INT gpu_count
+        TINYINT same_server_required
+        VARCHAR proposal_type
+        TEXT reason
+        JSON changes
+        TEXT cautions
+        TIMESTAMP created_at
+    }
+    proposal_responses {
+        BIGINT response_id PK
+        BIGINT proposal_id FK "composite FK and UK with job, customer"
+        BIGINT job_request_id FK "part of proposal identity"
+        BIGINT customer_id FK
+        VARCHAR decision
+        TIMESTAMP responded_at
+        BIGINT accepted_job_request_id UK "generated; nullable"
     }
 ```
 
@@ -211,6 +238,45 @@ Generated Column은 부모 상태를 참조할 수 없으므로 헤더·자식 �
 | DB | 테이블 | FK | 원본 보존 트리거 | 상태 |
 | --- | --- | --- | --- | --- |
 | `aidc_workload_matcher` | 기본 6개 + 할당 2개 | 9개 | 4개 | 2026-11-08 사용자 승인·백업 복원 검증 후 적용 완료 |
-| `aidc_workload_matcher_test` | 기본 6개 + 할당 2개 | 9개 | 4개 | v0.2-2 적용 완료, 이번 재적용 없음 |
+| `aidc_workload_matcher_test` | 기본 6개 + 할당 2개 + 제안/응답 2개 | 14개 | 4개 | v0.3-1은 테스트 DB에만 적용 |
 
-기존 6개 테이블·트리거 정의는 원본 SQL과 같고 두 DB의 seed도 일치한다. 개발 DB의 6→8 마이그레이션에서 원본 테이블 DDL·데이터·트리거를 보존했고, 이후 테스트·조회 전후의 지문도 같다. 두 DB 모두 할당 테이블은 각각 0행이다. 테스트 DB의 자동 증가 다음 번호는 논리 스키마 비교에서 제외한다. [검증 기록](../docs/v0.2-2-validation.md)에 범위와 결과를 기록했다.
+기존 테이블·트리거 정의와 seed는 보존한다. 두 DB 모두 할당 테이블은 각각 0행이며 테스트 종료 후 신규 제안·응답도 0행이다. 개발 DB에는 003을 적용하지 않았다. 테스트 DB의 자동 증가 다음 번호는 논리 스키마 비교에서 제외한다. [v0.3-1 검증 기록](../docs/v0.3-1-validation.md)에 전후 지문과 실제 결과를 기록했다.
+
+## v0.3-1 추가 테이블
+
+정의는 [003_workload_proposals.sql](migrations/003_workload_proposals.sql)이다. 기존 8개 테이블과 트리거 4개는 변경하지 않는다. 추가 PK 2개·FK 5개를 포함해 테스트 DB는 총 10개 테이블·FK 14개다.
+
+### job_proposals
+
+| 컬럼 | SQL 타입 | 의미·제약 |
+| --- | --- | --- |
+| proposal_id | BIGINT UNSIGNED | AUTO_INCREMENT PK |
+| job_request_id | BIGINT UNSIGNED | FK → 원본 Job, RESTRICT |
+| customer_id | BIGINT UNSIGNED | FK → 고객, 서비스가 원본 Job에서 읽는 소유자 스냅샷 |
+| gpu_model_id | BIGINT UNSIGNED | FK → 제안 모델, 서비스는 원본 모델 유지 |
+| gpu_count | INT | CHECK > 0, 서비스는 원본 수량 이하 |
+| same_server_required | TINYINT | CHECK IN (0, 1) |
+| proposal_type | VARCHAR(24), ascii_bin | DISTRIBUTED / REDUCED_QUANTITY; DISTRIBUTED는 배치 플래그 0 |
+| reason / cautions | TEXT | 각각 공백 아닌 문자열, 제안 이유와 변경 위험 |
+| changes | JSON | CHECK JSON_TYPE = ARRAY; 서비스가 실제 변경 필드·원본 값·제안 값을 검증 |
+| created_at | TIMESTAMP(6) | UTC 생성 시각 |
+
+조건 중복은 `(job_request_id, gpu_model_id, gpu_count, same_server_required)` UNIQUE로 막는다. 과거 거절 이력도 조건 키를 계속 점유하며 덮어쓰지 않는다. 응답의 참조 대상인 `(proposal_id, job_request_id, customer_id)`에도 UNIQUE를 둔다. 고객·모델 FK 인덱스와 조건 인덱스를 통해 Job별 조회를 지원한다.
+같은 모델·분산 배치 완화·수량 감소·원본 소유자 일치는 서비스 검증이다. 기존 테이블에 새 복합 인덱스를 만들거나 원본 조건을 UPDATE하지 않는다.
+
+### proposal_responses
+
+| 컬럼 | SQL 타입 | 의미·제약 |
+| --- | --- | --- |
+| response_id | BIGINT UNSIGNED | AUTO_INCREMENT PK |
+| proposal_id / job_request_id / customer_id | BIGINT UNSIGNED | 함께 job_proposals의 동일 세 컬럼을 참조하는 복합 FK, RESTRICT |
+| customer_id | BIGINT UNSIGNED | 고객 테이블에도 직접 FK, RESTRICT |
+| decision | VARCHAR(16), ascii_bin | CHECK IN (ACCEPTED, REJECTED) |
+| responded_at | TIMESTAMP(6) | UTC 최초 확정 응답 시각 |
+| accepted_job_request_id | BIGINT UNSIGNED, Generated STORED | ACCEPTED이면 Job ID, 아니면 NULL; UNIQUE |
+
+제안별 응답 키 `(proposal_id, job_request_id, customer_id)`의 UNIQUE와 동일 튜플 복합 FK를 함께 사용한다. proposal_id 하나에 가능한 부모 튜플이 하나이므로 제안당 확정 응답도 최대 하나다. 다른 Job·고객을 붙인 응답은 FK로 거부한다. 수락 Job의 UNIQUE는 다른 제안에 대한 이중 수락을 거부하며 거절은 여러 제안에 보존할 수 있다.
+Job별 응답 조회 인덱스 `(job_request_id, response_id)`와 고객 FK 인덱스를 둔다. 다른 종료 의사로 바꾸는 API는 없고 동일 응답은 ID·시각을 보존해 재응답한다.
+
+신규 테이블의 불변성은 서비스의 추가·조회 전용 인터페이스와 충돌 정책이다. DB의 일반 UPDATE/DELETE까지 새 트리거로 금지한 것은 아니며 운영 권한 제한이 필요하다. 테스트가 생성한 정확한 임시 ID의 정리 외에 서비스는 이력을 삭제하지 않는다.
+제안·응답은 allocations와 직접 연결하지 않는다. v0.3-2에서 실제 배정의 원본/수락 대안 근거와 response_id를 연결하고 당시 적용 조건을 추적해야 한다.

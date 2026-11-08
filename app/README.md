@@ -1,7 +1,7 @@
-# 애플리케이션 v0.2-2
+# 애플리케이션 v0.3-1
 
 `db.py`의 기존 환경변수 기반 연결을 사용해 원본 GPU 요구조건의 하드웨어 수량·배치를 검사합니다.
-v0.2-1 하드웨어 매칭은 그대로 유지하고 v0.2-2 배정·반환 CLI를 별도로 제공합니다. 예약, 대안 생성·동의, 시간 예측, Flask UI와 실제 학습 실행은 포함하지 않습니다.
+v0.2-1 하드웨어 매칭과 v0.2-2 원본 조건 배정·반환 CLI를 유지합니다. v0.3-1은 별도 CLI로 같은 모델의 대안 생성·고객 의사 기록을 제공합니다. 예약·수락 대안의 실제 배정·시간 예측·Flask UI·실제 학습 실행은 포함하지 않습니다.
 
 ```powershell
 # 개발 DB: 읽기 전용 검사
@@ -83,3 +83,23 @@ CLI는 모든 조회를 같은 읽기 전용 스냅샷에서 실행하고 끝나
 서비스는 이력을 삭제하지 않습니다. CLI 쓰기 예시를 수동 실행하면 테스트 DB에도 기록이 남으며, seed Job에 기존 이력이 있으면 통합 스위트는 그 이력을 보존하기 위해 중단합니다. 안전한 검증은 [pytest 실행 안내](../tests/README.md)를 따릅니다.
 
 종료 코드 0은 처리 성공이며 `available`의 부족 판단도 포함합니다. 코드 2는 입력·대상·부족·충돌·무결성 오류(JSON), 코드 1은 DB 설정·접속·SQL 오류입니다. 실제 실행 결과는 [v0.2-2 검증 기록](../docs/v0.2-2-validation.md)에 있습니다.
+
+## v0.3-1 제안·응답 CLI
+
+003 마이그레이션은 테스트 DB에만 적용되어 있습니다. 개발 DB는 기존 8개 테이블 상태이며 자동 마이그레이션하지 않습니다.
+
+| 명령 (`python -m app.proposal_cli --test` 뒤 인자) | 처리 |
+| --- | --- |
+| `generate JOB_ID` | 현재 원본 가용성을 확인하고 가능한 대안을 중복 없이 저장 |
+| `list JOB_ID` | 과거 제안을 포함한 조건·원본·응답 목록 |
+| `show PROPOSAL_ID` | 원본과 제안의 조건·변경·주의사항 및 응답 |
+| `accept JOB_ID PROPOSAL_ID CUSTOMER_ID` | 고객·Job·Proposal 관계 확인 후 수락 의사 기록 |
+| `reject JOB_ID PROPOSAL_ID CUSTOMER_ID` | 같은 관계 검사 후 거절 기록 |
+| `history JOB_ID` | 수락·거절 이력 조회 |
+
+`generate` 결과는 ORIGINAL_AVAILABLE / PROPOSALS_AVAILABLE / NO_FEASIBLE_ALTERNATIVES이며 원본의 가용성·부족 사유와 제안을 함께 출력합니다. 제안은 gpu_model_id·gpu_count·same_server_required·proposal_type·reason·changes·cautions·created_at을 포함합니다. `show`와 `list`의 원본 요구조건으로 동일 모델 유지 여부도 확인합니다.
+`scope`는 비예약·비배정·추후 재검증을, `authentication_notice`는 고객 ID 검사가 실제 인증이 아님을 알립니다. ACCEPTED는 실제 할당 결과가 아닙니다.
+
+서비스 쓰기는 READ COMMITTED와 기존 배정 서비스의 잠금 순서를 재사용하고 읽기 CLI는 READ ONLY REPEATABLE READ 스냅샷을 사용합니다. 기존 AllocationService는 변경하지 않았습니다.
+제안/응답 서비스에는 UPDATE·DELETE API가 없습니다. 같은 조건은 기존 레코드를 반환하고 같은 응답은 같은 ID·시각을 반환합니다. 반대 응답이나 Job의 두 번째 수락은 PROPOSAL_CONFLICT입니다. 고객 불일치는 CUSTOMER_MISMATCH, 없는 대안은 PROPOSAL_NOT_FOUND입니다.
+종료 코드 0은 대안 없음도 포함한 정상 처리, 2는 입력·업무 오류, 1은 비밀정보를 제외한 DB·설정 오류입니다. 실제 예시와 동시성 정책은 [v0.3-1 검증 기록](../docs/v0.3-1-validation.md)을 따릅니다.

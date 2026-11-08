@@ -40,11 +40,11 @@ def preflight(report, resume=False):
     return tuple(name for name in EXTENSIONS if name not in present)
 
 
-def base_fingerprint(connection):
+def base_fingerprint(connection, version="v0.1"):
     """Compare all original values and definitions; never emit a data dump."""
     result = {}
     with closing(connection.cursor()) as cursor:
-        for name in definitions()[0]:
+        for name in definitions(version)[0]:
             execute(cursor, f"SELECT * FROM `{name}` ORDER BY 1", "migration-audit", name)
             rows = cursor.fetchall()
             execute(cursor, f"SHOW CREATE TABLE `{name}`", "migration-audit", name)

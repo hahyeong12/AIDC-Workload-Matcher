@@ -45,7 +45,7 @@ class RollbackEnvelope:
 
 @pytest.fixture
 def allocation_case(db, sample):
-    assert inspect(db)["schema_version"] == "v0.2-2", "Run database.migrate --test --apply first"
+    assert inspect(db)["schema_version"] in ("v0.2-2", "v0.3-1"), "Complete allocation schema required"
     model, server = sample["model"], sample["server"]
     gpu_ids = [sample["gpu"]]
     for number in range(3):

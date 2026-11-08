@@ -21,12 +21,12 @@
 | 화면 | HTML/CSS/JavaScript | 자원 조회, 요청 등록, 대안 확인 및 수락 |
 | 협업 | GitHub | 소스 버전 관리 및 변경 검토 |
 
-## v0.2-2 현재 구조
+## v0.3-1 현재 구조
 
-원본 조건의 GPU 배정·완료·실패·반환·재사용 및 이력 조회를 구현했고, 2026-11-08 재검증에서 **전체 240 passed / 실제 MySQL 83 passed**를 확인했습니다.
-2026-11-08 사용자 승인과 실제 백업 복원 검증 후 개발 DB에도 v0.2-2의 할당 테이블 2개를 추가했습니다. 현재 개발·테스트 DB는 각각 8개 테이블·원본 보존 트리거 4개입니다. 기존 데이터·정의·seed는 보존했습니다.
-개발 DB에서는 조회 기능만 검증했고 배정·반환·동시성 검증은 전용 테스트 DB에서 `--test`로 실행했습니다. 마이그레이션 후에도 전체 240개와 실제 MySQL 83개가 통과했습니다.
-실제 실행 결과와 보존 검증은 [v0.2-2 검증 기록](docs/v0.2-2-validation.md)을 참고합니다.
+원본 요구조건과 현재 미할당 GPU를 비교해 같은 모델의 분산 배치·수량 축소 대안을 생성하고 고객의 수락·거절을 기록합니다. **대안 생성·수락은 GPU를 예약하거나 배정하지 않습니다.** CLI 고객 ID는 업무 관계 검사용이며 실제 인증이 아닙니다.
+2026-11-08 실제 재실행 결과는 **전체 364 passed / 실제 MySQL 134 passed**입니다. 기존 v0.2-2의 240개 테스트와 원본 조건 배정·반환 기능을 유지했습니다.
+개발 DB는 v0.2-2의 **8개 테이블·트리거 4개**를 유지하며 003 마이그레이션은 미적용입니다. 테스트 DB에만 **10개 테이블·트리거 4개**를 준비했습니다. 기존 데이터·정의·seed·할당 이력은 보존했습니다.
+상세 결과는 [v0.3-1 검증 기록](docs/v0.3-1-validation.md), 이전 개발 DB 적용 이력은 [v0.2-2 검증 기록](docs/v0.2-2-validation.md)을 참고합니다.
 
 ```text
 AIDC-Workload-Matcher/
@@ -42,6 +42,7 @@ AIDC-Workload-Matcher/
 │   ├── decisions.md
 │   ├── v0.2-1-validation.md
 │   ├── v0.2-2-validation.md
+│   ├── v0.3-1-validation.md
 │   └── mysql-recovery.md
 ├── database/
 │   ├── README.md
@@ -52,9 +53,11 @@ AIDC-Workload-Matcher/
 │   ├── initialize.py
 │   ├── inspect_schema.py
 │   ├── migrate.py
+│   ├── proposal_migrate.py
 │   ├── migrations/
 │   │   ├── README.md
-│   │   └── 002_transactional_allocations.sql
+│   │   ├── 002_transactional_allocations.sql
+│   │   └── 003_workload_proposals.sql
 │   ├── recover.py
 │   ├── admin_missing_triggers.sql
 │   └── admin_missing_triggers_test.sql
@@ -66,17 +69,27 @@ AIDC-Workload-Matcher/
 │   ├── match_cli.py
 │   ├── allocation.py
 │   ├── allocation_cli.py
+│   ├── proposal.py
+│   ├── proposal_cli.py
 │   ├── repositories/
 │   │   ├── hardware.py
-│   │   └── allocations.py
+│   │   ├── allocations.py
+│   │   └── proposals.py
 │   └── services/
 │       ├── hardware.py
-│       └── allocations.py
+│       ├── allocations.py
+│       └── proposals.py
 └── tests/
     ├── README.md
     ├── conftest.py
     ├── mysql_audit.py
     ├── allocation_helpers.py
+    ├── proposal_helpers.py
+    ├── test_proposal_cli.py
+    ├── test_proposal_migration.py
+    ├── test_proposal_service.py
+    ├── test_mysql_proposals.py
+    ├── test_mysql_proposal_concurrency.py
     ├── test_allocation_cli.py
     ├── test_allocation_migration.py
     ├── test_allocation_service.py
@@ -95,7 +108,8 @@ v0.1은 고객·GPU 모델·서버·개별 GPU·원본 요청·원본 요구조�
 원본 요청과 요구조건의 변경·삭제는 DB 트리거로 차단합니다. SQL 제공과 실제 DB 적용은 구분하며 DB가 준비되지 않은 환경에서는 SQL을 실행하지 않습니다.
 v0.2-1은 이 구조를 유지하며 원본 GPU 요구조건에 대한 읽기 전용 하드웨어 매칭을 추가합니다.
 v0.2-2는 기존 6개 테이블과 트리거를 유지하며 `allocations`, `allocation_gpus` 2개 테이블을 추가합니다.
-Flask 실행 진입점, 웹 UI, 대안 생성·고객 동의·예약 기능은 후속 범위입니다.
+v0.3-1은 `job_proposals`, `proposal_responses`를 추가해 대안과 고객 의사를 분리해 보존합니다.
+Flask 실행 진입점·웹 UI·예약·수락된 대안의 실제 GPU 배정은 후속 범위입니다.
 
 ## 하드웨어 조건 검사
 
@@ -129,7 +143,26 @@ GPU를 재사용하려면 다른 Job으로 배정합니다. 자원 부족·SQL �
 JSON 필드·종료 코드는 [앱 안내](app/README.md), DB별 적용 정책은 [마이그레이션 안내](database/migrations/README.md)를 따릅니다.
 
 개발 DB 적용 전 백업은 Git 제외 경로 `database/backups/v0.2-2-dev-20261108T133702+0900/development-before.sql`에 보관했습니다. MySQL 공식 mysqldump 8.0.46으로 생성하고 별도 임시 MySQL에 실제 복원하여 모든 행·테이블 6개·트리거 4개의 지문 일치를 확인했습니다. 백업 내용과 인증정보는 커밋하지 않습니다.
-기존 CLI의 개발 DB `--apply` 차단은 유지합니다. 이번 명시적 승인에 한해 백업·사전 검사 후 기존 `migrate(connection, apply=True)`를 별도 일회성 실행 경로에서 호출했습니다. 두 DB 모두 현재 추가 마이그레이션을 재실행할 필요가 없습니다.
+기존 CLI의 개발 DB `--apply` 차단은 유지합니다. v0.2-2에 대한 당시 명시적 승인 범위에서만 기존 `migrate(connection, apply=True)`를 호출했습니다. 002는 재실행하지 않으며 새 003은 테스트 DB에만 적용했습니다. 개발 DB의 003 적용에는 별도 승인이 필요합니다.
+
+## 대안 생성과 고객 응답
+
+현재는 003이 적용된 테스트 DB에서 `--test`를 명시합니다.
+
+```powershell
+$result = .\.venv\Scripts\python.exe -m app.proposal_cli --test generate 003 | ConvertFrom-Json
+.\.venv\Scripts\python.exe -m app.proposal_cli --test list 003
+.\.venv\Scripts\python.exe -m app.proposal_cli --test show $result.proposals[0].proposal_id
+# seed Job 003의 고객 ID는 2. 이 입력은 실제 인증이 아님
+.\.venv\Scripts\python.exe -m app.proposal_cli --test accept 003 $result.proposals[0].proposal_id 2
+.\.venv\Scripts\python.exe -m app.proposal_cli --test reject 003 $result.proposals[1].proposal_id 2
+.\.venv\Scripts\python.exe -m app.proposal_cli --test history 003
+```
+
+seed Job 003에는 H100 4개 분산 허용 / H100 3개 동일 서버 대안을, Job 005에는 A100 2개 분산 허용 대안을 확인했습니다. 원본 조건을 이미 만족하면 대안을 만들지 않으며 가용 GPU가 0개이면 수량 축소도 생성하지 않습니다.
+분산 학습 지원 여부와 수량 축소의 성능·시간·품질 영향은 검증되지 않았습니다. 모델 대체·시간 연장·epoch 축소·성능 예측은 구현하지 않았습니다.
+같은 조건은 기존 제안 ID·시각·응답을 보존합니다. 같은 응답은 멱등적으로 반환하고 반대 응답은 충돌이며 Job당 수락은 최대 한 건입니다. 수락된 조건은 v0.3-2 배정 시 다시 검증해야 합니다.
+위 CLI는 제안·응답 이력을 남깁니다. 기존 seed 이력이 있으면 동시성 테스트는 삭제하지 않고 중단하므로, 임시 데이터 정리까지 포함한 검증에는 [전체 pytest](tests/README.md)를 사용합니다.
 
 ## 개발 환경 준비
 
@@ -155,7 +188,7 @@ Copy-Item .env.example .env
 MySQL 8.0.16 이상이 필요하며, 이번 재검증 환경은 Windows 11 / Python 3.14.6 / MySQL 8.0.46입니다. `requirements.txt`의 네 패키지 버전과 설치 버전이 일치하고 `pip check`가 통과했습니다. 지원 대상으로 둔 다른 Python 버전은 아직 실행 검증하지 않았습니다.
 새 빈 DB에 적용하는 방법과 별도 테스트 DB 준비는 [DB 안내](database/README.md), 실제 통합 테스트 실행은 [테스트 안내](tests/README.md)를 따릅니다.
 테이블만 생성되고 트리거 생성이 실패했다면 전체 초기화를 반복하지 말고 [MySQL 부분 스키마 복구 안내](docs/mysql-recovery.md)를 확인합니다. 기본 점검 명령은 `python -m database.recover`이며 읽기 전용입니다.
-현재 전체 검증은 `python -m pytest -q --run-mysql`로 **240 passed**입니다. 기본 실행은 **157 passed, 83 skipped**이며 MySQL 성공으로 계산하지 않습니다. Windows 테스트는 실행마다 새 `.pytest-tmp/` 하위 경로를 사용합니다.
+현재 전체 검증은 `python -m pytest -q --run-mysql`로 **364 passed**입니다. 기본 실행은 **230 passed, 134 skipped**이며 MySQL 성공으로 계산하지 않습니다. Windows 테스트는 실행마다 새 `.pytest-tmp/` 하위 경로를 사용합니다.
 
 ### VS Code와 PowerShell
 
@@ -178,8 +211,8 @@ Windows PowerShell의 유효 실행 정책 `Restricted`가 `Documents/WindowsPow
 ## 개발 방향
 
 1. 원본 요청과 요구조건을 같은 트랜잭션에 저장하는 등록 서비스를 구현합니다.
-2. 대안·고객 동의 모델과 제시·수락 흐름을 설계하고 기존 배정 서비스에 연결합니다.
+2. v0.3-2에서 수락된 대안과 응답 ID를 배정 근거로 추적하고, 실제 배정 직전 자원을 재검증하도록 기존 배정 서비스를 확장합니다.
 3. 명시적 재실행 정책, 장비 운영 변경의 잠금 정책을 정한 뒤 필요한 범위만 확장합니다.
-4. 실행 시뮬레이션과 Flask 화면을 연결합니다. 이번 마이그레이션 작업에서는 후속 기능 구현을 시작하지 않았습니다.
+4. 실행 시뮬레이션과 Flask 화면을 연결합니다. v0.3-1에서는 웹 UI·수락 대안의 실제 배정을 구현하지 않았습니다.
 
 상세 기능은 [요구사항](docs/requirements.md), 계층과 처리 흐름은 [아키텍처](docs/architecture.md), 설계 근거는 [설계 결정](docs/decisions.md)에 기록합니다.

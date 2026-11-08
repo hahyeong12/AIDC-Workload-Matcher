@@ -1,17 +1,17 @@
 # 테스트
 
-## 현재 재검증 결과 (2026-11-08, v0.2-2)
+## 현재 재검증 결과 (2026-11-08, v0.3-1)
 
 Windows 11 / 프로젝트 `.venv` Python 3.14.6 / pytest 9.2.0 / MySQL 8.0.46에서 직접 재실행했다.
 
 | 실행 | 결과 |
 | --- | --- |
-| `python -m pytest -q` | **157 passed, 83 skipped** |
-| `python -m pytest -q --run-mysql` | **240 passed** |
-| `python -m pytest -q -m mysql --run-mysql` | **83 passed, 157 deselected** |
+| `python -m pytest -q` | **230 passed, 134 skipped** |
+| `python -m pytest -q --run-mysql` | **364 passed** |
+| `python -m pytest -q -m mysql --run-mysql` | **134 passed, 230 deselected** |
 
-전체는 로컬 157개 + 실제 MySQL 83개다. MySQL 테스트는 기존 스키마 27개, 하드웨어 매칭 24개, 배정·반환 26개, 실제 동시성·CLI 6개로 구성된다.
-전체/통합 실행은 실패·오류·skip이 없다. 아래 v0.1/v0.2-1 절은 과거 이력이다. 상세 근거는 [v0.2-2 검증 기록](../docs/v0.2-2-validation.md)을 따른다.
+전체는 로컬 230개 + 실제 MySQL 134개다. 기존 v0.2-2의 240개(로컬 157 + MySQL 83)를 유지하고 신규 124개(로컬 73 + MySQL 51)를 추가했다. 신규는 proposal_service 43, proposal_cli 10, proposal_migration 20, mysql_proposals 42, mysql_proposal_concurrency 9개다.
+전체/통합 실행은 실패·오류·skip·경고가 없다. 기본 실행의 skip은 MySQL 미실행이다. 아래 이전 버전 절은 과거 이력이며 상세 근거는 [v0.3-1 검증 기록](../docs/v0.3-1-validation.md)을 따른다.
 
 저장소 루트에서 설치된 가상환경으로 실행한다.
 
@@ -26,7 +26,7 @@ Windows 11 / 프로젝트 `.venv` Python 3.14.6 / pytest 9.2.0 / MySQL 8.0.46에
 
 1. 개발 DB와 다른 전용 테스트 DB 및 계정을 발급받는다. 이름은 `_test`로 끝나야 한다.
 2. `.env`에 `TEST_MYSQL_HOST/PORT/DATABASE/USER/PASSWORD`를 모두 설정한다. 개발용 값으로 대체하지 않는다.
-3. 새 빈 테스트 DB만 [DB 안내](../database/README.md)에 따라 기본 schema·트리거·seed를 한 번 준비하고 [추가 마이그레이션](../database/migrations/README.md)으로 8개 테이블을 준비한다. 현재 테스트 DB는 이미 준비되어 있으므로 재적용하지 않는다.
+3. 새 빈 테스트 DB만 [DB 안내](../database/README.md)에 따라 기본 schema·트리거·seed를 한 번 준비하고 [추가 마이그레이션](../database/migrations/README.md) 002·003으로 10개 테이블을 준비한다. 현재 테스트 DB는 이미 준비되어 있으므로 재적용하지 않는다. 개발 DB에는 003을 적용하지 않는다.
 4. 연결 확인 후 테스트를 실행한다.
 
 ```powershell
@@ -35,7 +35,7 @@ Windows 11 / 프로젝트 `.venv` Python 3.14.6 / pytest 9.2.0 / MySQL 8.0.46에
 ```
 
 명시적으로 통합 테스트를 켠 경우 설정·연결·스키마 문제는 skip하지 않고 실패로 처리한다.
-검증 대상은 총 8개 테이블의 PK·9개 FK·UNIQUE·CHECK, GPU 수량·배치·상태, 서버/GPU 및 요청/요구조건 JOIN, 원본 수정·삭제 거부와 배정·반환·동시성이다.
+검증 대상은 총 10개 테이블·14개 FK의 참조 관계, PK/UNIQUE/CHECK, GPU 수량·배치·상태, 원본 보호와 배정·반환·제안·응답·동시성이다. 업무 규칙과 직접 SQL 제약 검증을 구분한다.
 SQLite나 모의 객체 결과를 MySQL 무결성 검증으로 취급하지 않는다.
 
 일반 테스트는 UUID가 포함된 자기 데이터만 INSERT하고 끝나면 전체 ROLLBACK한다. 원본 UPDATE/DELETE 거부 테스트도 해당 테스트가 만든 행에만 시도한다. 기존 행을 수정하거나 삭제하지 않는다.
@@ -44,8 +44,15 @@ SQLite나 모의 객체 결과를 MySQL 무결성 검증으로 취급하지 않�
 `test_mysql_allocation_concurrency.py`의 6개 테스트는 별도 연결의 실제 잠금 대기·COMMIT·ROLLBACK과 실제 CLI 하위 프로세스를 검증한다. 변경하지 않은 seed Job 1~5를 참조하는 임시 할당만 커밋하고, 등록한 정확한 allocation_id의 자식·헤더만 finally에서 정리한다. DB별 advisory lock으로 지원 테스트 실행을 분리하고, 기존 seed 할당 이력이 있으면 쓰기 전에 중단한다. 다른 테스트나 앱 쓰기와 동시에 실행하지 않는다.
 테스트는 DB나 테이블을 생성·삭제·초기화하지 않는다. 이번 스위트 실행 전후 전체 행·논리 스키마·트리거 지문을 비교했다. 자동 증가 다음 번호는 롤백해도 돌아가지 않으므로 비교에서 제외하며 번호 간격이 생길 수 있다.
 
-이번에는 스위트 외에도 실제 서비스 연결에서 첫 GPU INSERT 후 두 번째 FK 오류, GPU 반환 UPDATE 후 헤더 CHECK 오류를 각각 주입해 외부 트랜잭션의 전체 롤백을 확인했다. 두 시나리오는 pytest 통과 수에 더하지 않았다.
+v0.2-2 안정화 당시에는 스위트 외에도 실제 서비스 연결에서 첫 GPU INSERT 후 두 번째 FK 오류, GPU 반환 UPDATE 후 헤더 CHECK 오류를 각각 주입해 외부 트랜잭션의 전체 롤백을 확인했다. 당시 두 시나리오는 pytest 통과 수에 더하지 않았다.
 독립 읽기 전용 감사 연결에서 개발·테스트 DB 모두 전후 지문과 모든 seed 값을 비교했고 일치했다. 감사는 `tests/mysql_audit.py`의 `snapshot(connection, version)`을 사용한다. 개발 DB에는 INSERT하지 않았다.
+
+## v0.3-1 임시 데이터·동시성 정책
+
+`test_mysql_proposals.py` 42개는 기존 seed를 읽거나 UUID 임시 Job·장비를 외부 트랜잭션에 만들고 SAVEPOINT 경계로 서비스 SQL을 검증한 뒤 전체 롤백한다. 생성·수락·거절 전후 기존 8개 테이블 지문을 비교해 GPU 점유·원본 보존을 확인한다.
+`test_mysql_proposal_concurrency.py` 9개는 실제 별도 연결의 잠금 대기·커밋·롤백, 직접 SQL의 수락 UNIQUE, 실제 CLI를 검증한다. seed Job을 변경하지 않고 테스트가 만든 Proposal ID만 등록해 finally에서 그 응답·제안만 정리한다. 실제 외부 트랜잭션의 두 번째 제안 INSERT 오류 및 응답 INSERT 뒤 CHECK 오류 롤백도 포함한다.
+이 테스트는 기존 배정 동시성 테스트와 같은 `_v022_seed_tests` advisory lock을 사용한다. seed Job에 기존 제안 이력이 있으면 삭제하지 않고 중단한다. 다른 테스트/앱 쓰기와 병렬 실행하지 않는다. 수동 CLI로 기록한 이력을 전체 삭제하거나 초기화해 테스트를 맞추지 않는다.
+개발 DB는 v0.2-2의 8개 그대로이고 모든 행·정의·트리거 지문이 보존됐다. 테스트 DB는 10개이며 테스트 종료 후 신규 제안·응답은 0행, 기존 8개 지문은 원래와 같다. 자동 증가 번호 간격은 기존 정책대로 허용한다.
 
 ## 이번 환경의 검증 기록 (2026-11-03)
 

@@ -56,9 +56,10 @@ def mysql_connection():
             cursor.execute("SELECT TABLE_NAME, ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()")
             tables = cursor.fetchall()
             actual = {row[0] for row in tables}
-            expected = set(definitions("v0.2-2" if "allocations" in actual else "v0.1")[0])
+            version = "v0.3-1" if "job_proposals" in actual else "v0.2-2" if "allocations" in actual else "v0.1"
+            expected = set(definitions(version)[0])
             if actual != expected:
-                pytest.fail("Test database must have a complete v0.1 or v0.2-2 schema; inspect/migrate first", pytrace=False)
+                pytest.fail("Test database must have a complete supported schema; inspect/migrate first", pytrace=False)
             if any(engine != "InnoDB" for _, engine in tables):
                 pytest.fail("Integration tests require InnoDB rollback safety for every table", pytrace=False)
             cursor.execute("SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE()")

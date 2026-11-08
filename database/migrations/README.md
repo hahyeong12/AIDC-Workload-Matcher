@@ -2,6 +2,7 @@
 
 [002_transactional_allocations.sql](002_transactional_allocations.sql)은 allocations / allocation_gpus만 생성한다. 기존 데이터가 있는 DB에 schema.sql을 다시 실행하지 않는다.
 현재 개발 DB는 v0.1의 6개 테이블, 테스트 DB는 v0.2-2의 8개 테이블이다. 개발 DB 적용은 **별도 사용자 승인 전까지 미수행**이다.
+2026-11-08 두 DB를 다시 조회해 테이블·트리거 정의와 모든 seed 값이 일치함을 확인했다. 이번에는 두 DB 모두 사전 검사만 실행했고 마이그레이션을 적용하거나 재실행하지 않았다. 테스트 DB의 `pending_tables`는 비어 있으며 개발 DB에는 추가 2개 테이블이 남아 있다. [실제 검증 기록](../../docs/v0.2-2-validation.md)을 참고한다.
 
 ## 사전 검사와 테스트 DB 적용
 
@@ -10,7 +11,7 @@
 .\.venv\Scripts\python.exe -m database.migrate
 .\.venv\Scripts\python.exe -m database.migrate --test
 
-# 승인된 테스트 DB에만 추가 DDL 적용
+# 아직 추가 테이블이 없는 새 테스트 DB에만 적용. 현재 테스트 DB에서는 실행하지 않음
 .\.venv\Scripts\python.exe -m database.migrate --test --apply
 ```
 
@@ -47,7 +48,7 @@ MySQL의 [DDL 암묵적 커밋](https://dev.mysql.com/doc/refman/8.0/en/implicit
 ```
 
 `IF NOT EXISTS`, DROP, ALTER, TRUNCATE, seed 재적용을 통한 오류 숨김은 사용하지 않는다. 새 정의가 다른데 같은 이름만 있다고 성공으로 처리하지 않는다.
-이번 실제 적용에서는 테이블 2개 생성 후 MySQL이 Generated Column에 붙인 괄호·문자셋 표기 때문에 검사기가 정의 불일치를 보고했다. SQL 의미가 같은 것을 확인하고 비교 정규화를 보완했다. 테이블은 재생성·변경하지 않았고, 재검사에서 모두 일치했다.
+초기 v0.2-2 적용 당시 테이블 2개 생성 후 MySQL이 Generated Column에 붙인 괄호·문자셋 표기 때문에 검사기가 정의 불일치를 보고했다. 당시 SQL 의미가 같은 것을 확인하고 비교 정규화를 보완했다. 테이블은 재생성·변경하지 않았으며 이번 재검증에서도 정의가 일치했다.
 
 ## 기존 검사·복구 도구
 

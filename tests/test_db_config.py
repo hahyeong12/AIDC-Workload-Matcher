@@ -28,6 +28,7 @@ def test_rejects_invalid_ports(settings, port):
 
 def test_connection_disables_autocommit_and_uses_strict_mode(settings):
     result = connection_settings(environ=settings)
+    assert result["use_pure"] is True
     assert result["autocommit"] is False
     assert "STRICT_ALL_TABLES" in result["sql_mode"]
     assert result["time_zone"] == "+00:00"

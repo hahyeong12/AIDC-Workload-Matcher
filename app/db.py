@@ -68,6 +68,9 @@ def connection_settings(prefix="MYSQL_", environ=None):
         "user": values[prefix + "USER"],
         "password": values[prefix + "PASSWORD"],
         "charset": "utf8mb4",
+        # Use the Python implementation consistently across Windows machines;
+        # the C extension can fail during authentication with an opaque RuntimeError.
+        "use_pure": True,
         "autocommit": False,
         "connection_timeout": 5,
         "time_zone": "+00:00",

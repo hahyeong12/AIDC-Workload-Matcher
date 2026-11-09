@@ -2,7 +2,7 @@
 
 from contextlib import closing
 
-from app.allocation import AllocationConflict, AllocationGPU, AllocationNotFound, AllocationResult
+from app.allocation import AllocationBasis, AllocationConflict, AllocationGPU, AllocationNotFound, AllocationResult
 from app.db import database_step
 from app.matching import GPU
 from app.repositories.hardware import HardwareRepository
@@ -71,7 +71,32 @@ class AllocationRepository(HardwareRepository):
             raise AllocationNotFound("해당 할당이 존재하지 않습니다.")
         gpus = self.query("SELECT gpu_id, server_id, assigned_at, released_at FROM allocation_gpus "
                           "WHERE allocation_id = %s ORDER BY gpu_id" + suffix, (allocation_id,))
-        return AllocationResult(*rows[0], tuple(AllocationGPU(*row) for row in gpus), replayed)
+        return AllocationResult(*rows[0], tuple(AllocationGPU(*row) for row in gpus), replayed,
+                                self.get_basis(allocation_id, lock=lock))
+
+    def has_bases(self):
+        return bool(self.query("SELECT TABLE_NAME FROM information_schema.TABLES "
+                               "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'allocation_bases'"))
+
+    def get_basis(self, allocation_id, *, lock=False):
+        if not self.has_bases():
+            return None
+        rows = self.query("SELECT basis_type, job_request_id, customer_id, proposal_id, response_id, "
+                          "gpu_model_id, gpu_count, same_server_required FROM allocation_bases "
+                          "WHERE allocation_id = %s" + (" FOR UPDATE" if lock else ""), (allocation_id,))
+        return AllocationBasis(*rows[0][:-1], bool(rows[0][-1])) if rows else None
+
+    def create_basis(self, allocation_id, basis):
+        self.query("INSERT INTO allocation_bases (allocation_id, basis_type, job_request_id, customer_id, "
+                   "proposal_id, response_id, gpu_model_id, gpu_count, same_server_required) "
+                   "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                   (allocation_id, basis.basis_type, basis.job_request_id, basis.customer_id,
+                    basis.proposal_id, basis.response_id, basis.gpu_model_id, basis.gpu_count,
+                    int(basis.same_server_required)), write=True)
+
+    def history_for_job(self, job_id):
+        return tuple(self.get_allocation(row[0]) for row in self.query(
+            "SELECT allocation_id FROM allocations WHERE job_request_id = %s ORDER BY allocation_id", (job_id,)))
 
     def create(self, job_id, gpus):
         allocated_at = self.query("SELECT UTC_TIMESTAMP(6)")[0][0]

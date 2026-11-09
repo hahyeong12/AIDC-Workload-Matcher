@@ -3,7 +3,7 @@
 | DB | 현재 적용 버전 | 테이블 / 원본 보호 트리거 |
 | --- | --- | --- |
 | 개발 `aidc_workload_matcher` | v0.2-2 | 8개 / 4개, 003 미적용 |
-| 테스트 `aidc_workload_matcher_test` | v0.3-1 | 10개 / 4개 |
+| 테스트 `aidc_workload_matcher_test` | v0.3-2 | 11개 / 4개 |
 
 기본 schema.sql, 002, 003은 별도 자산이다. 이미 적용된 초기화나 이전 마이그레이션은 재실행하지 않는다. 아래 002 적용 이력과 후반의 003 절을 구분한다.
 
@@ -110,3 +110,18 @@ DDL은 암묵적으로 커밋되므로 오류 시 생성된 첫 테이블을 자
 
 2026-11-08 양쪽 8개 구성과 모든 seed·기존 지문을 확인한 후 테스트 DB의 공식 mysqldump 백업을 Git 제외 경로 `database/backups/v0.3-1-test-20261108T140211+0900/test-before.sql`에 생성했다. 두 신규 테이블을 추가한 뒤 10개 정의가 일치하고 기존 8개·트리거가 보존됨을 확인했다. 개발 DB는 여전히 8개다.
 전체 364개 및 실제 MySQL 134개 검증 후 신규 테이블은 각 0행이고 기존 seed·할당 이력·트리거 지문이 같다. 백업과 감사 파일은 업로드하지 않는다. 상세 결과는 [검증 기록](../../docs/v0.3-1-validation.md)을 따른다.
+
+## 004: v0.3-2 수락 대안의 실제 배정
+
+004_allocation_bases.sql은 allocation_bases 한 개만 생성한다. 기존 schema.sql·002·003을 재실행하지 않는다. 개발 DB에는 003·004를 적용하지 않는다.
+
+```powershell
+# 읽기 전용 점검; 실제 적용 전 전체 데이터·정의·트리거 백업
+.\.venv\Scripts\python.exe -m database.basis_migrate --test
+# 아직 004가 없는 완전한 003 테스트 DB의 최초 적용
+.\.venv\Scripts\python.exe -m database.basis_migrate --test --apply
+```
+
+CLI의 개발 --apply는 연결 전에 차단하며 함수도 대상 이름이 _test가 아니면 쓰기를 거부한다. 기존 10개 정의·4개 트리거, 예상 밖 객체/루틴/이벤트, 전체 행·정의 지문을 검사한다. 002/003과 같은 DB별 advisory lock을 사용한다. 새 테이블이 이미 정확히 존재하면 DDL 없이 검증한다. 불일치·오류는 자동 삭제·ALTER·재생성 없이 중단한다. DDL은 암묵적으로 커밋되므로 사후 검사 실패 시 객체를 보존한다. 원본 10개 모든 값·정의·트리거를 전후 비교하고 백필하지 않는다.
+
+노트북 적용 전 공식 mysqldump 8.0.46으로 테스트 DB 10개·트리거 4개·모든 데이터를 --single-transaction으로 저장했다. 백업·감사 파일은 Git 제외 경로 database/backups/v0.3-2-laptop-20261110/에만 둔다. 실제 결과는 [v0.3-2 검증](../../docs/v0.3-2-validation.md)을 따른다.

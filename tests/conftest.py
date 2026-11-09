@@ -56,7 +56,8 @@ def mysql_connection():
             cursor.execute("SELECT TABLE_NAME, ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()")
             tables = cursor.fetchall()
             actual = {row[0] for row in tables}
-            version = "v0.3-1" if "job_proposals" in actual else "v0.2-2" if "allocations" in actual else "v0.1"
+            version = ("v0.3-2" if "allocation_bases" in actual else "v0.3-1" if "job_proposals" in actual
+                       else "v0.2-2" if "allocations" in actual else "v0.1")
             expected = set(definitions(version)[0])
             if actual != expected:
                 pytest.fail("Test database must have a complete supported schema; inspect/migrate first", pytrace=False)

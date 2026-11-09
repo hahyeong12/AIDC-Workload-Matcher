@@ -18,7 +18,7 @@ MySQL (자원, 요청, 요구조건, 대안, 동의, 할당 이력)
 pytest → 서비스 검증 및 MySQL 통합 검증
 ```
 
-전체 흐름은 목표 구조이다. v0.1은 [6개 기본 테이블 명세](../database/erd.md), 가상 seed, 연결 및 테스트를 제공한다. v0.2-1은 하드웨어 검사, v0.2-2는 원본 조건의 배정·반환·이력, v0.3-1은 같은 모델의 대안과 고객 의사 기록을 CLI로 제공한다. 웹 UI와 수락된 대안의 실제 배정은 후속 범위다. 현재 개발 DB는 8개, 테스트 DB만 10개 테이블이다.
+전체 흐름은 목표 구조이다. v0.1은 [6개 기본 테이블 명세](../database/erd.md), 가상 seed, 연결 및 테스트를 제공한다. v0.2-1은 하드웨어 검사, v0.2-2는 원본 조건의 배정·반환·이력, v0.3-1은 같은 모델의 대안과 고객 의사 기록을 CLI로 제공한다. v0.3-2는 수락 대안의 실제 배정과 근거 추적까지 CLI로 제공한다. 웹 UI는 후속 범위다. 현재 개발 DB는 8개, 테스트 DB는 11개 테이블이다.
 
 ## 계층별 책임
 
@@ -164,3 +164,15 @@ AllocationService: 기존 원본 배정 경로 유지, ProposalService가 호출
 
 `ProposalService.accepted(job_id)`는 v0.3-2용 `AcceptedProposal`을 읽는다. basis_kind=ACCEPTED_PROPOSAL과 proposal_id·response_id가 근거이며 인증이나 현재 GPU 가용성을 증명하지 않는다. v0.3-2에서 실제 인증·소유자·응답을 검증하고 원본/수락 조건의 출처를 배정에 연결한 뒤 같은 잠금 정책으로 재검증해야 한다.
 003은 테스트 DB에만 적용했다. 개발 DB는 기존 8개 테이블, 테스트 DB는 10개이며 둘 다 원본 보호 트리거 4개다. [v0.3-1 검증 기록](v0.3-1-validation.md)에 전체 364개와 실제 MySQL 134개 및 전후 보존 결과를 기록했다.
+
+## v0.3-2 배정 근거와 실행
+
+AllocationService.allocate_proposal(job_id, proposal_id, customer_id)는 기존 allocation_transaction, locked_context, 가용성 평가·GPU 선택·저장 함수를 재사용한다. 공통 잠금 순서는 모델 → Job → 원본 요구조건 → 서버 → GPU → Proposal → 응답 → 할당 → 할당-GPU → 배정 근거다. 종류별 ID는 오름차순이다. Proposal/응답 서비스도 모델·Job을 먼저 잠그므로 같은 모델의 지원 쓰기는 직렬화된다. 완료는 최초 할당을 잠금 없이 읽어 Job을 식별하고 같은 순서로 잠근 뒤 관계를 다시 읽는다.
+
+서비스는 대안의 Job·고객, 원본 소유자, 응답의 Proposal·Job·고객·ACCEPTED 및 허용된 조건 변화를 재검증한다. 원본의 불변 객체를 replace하여 적용 조건을 만들고 원본 DB 행은 UPDATE하지 않는다. 현재 재고를 잠근 상태에서 전체 수량을 선택하고 allocations/allocation_gpus와 allocation_bases를 한 트랜잭션으로 저장한다.
+
+allocation_bases는 1:1 추가 테이블이다. Repository는 근거를 추가/조회하며 UPDATE/DELETE API는 없다. 004 이전 할당에 근거가 없으면 불변 원본 조건을 ORIGINAL로 해석한다. 신규 004 배정은 근거를 항상 함께 저장한다. 8개 DB의 원본 기능은 새 테이블 없이도 작동하며 대안 배정은 004가 없으면 쓰기 전에 거부한다.
+
+완료는 근거와 원본·수락 증거가 일치하는지 확인하고 그 적용 수량·배치로 기존 반환 로직을 실행한다. 헤더 또는 GPU 반환 오류는 모두 롤백한다. detail/job-history는 읽기 전용 일관 스냅샷에서 근거를 검증한다.
+
+FK·CHECK는 존재·기본 형태·Proposal의 고객/Job 연결을 보장한다. 응답이 정확히 해당 수락이며 할당 Job·조건이 일치한다는 교차 행 규칙은 잠금 안의 서비스 검증 책임이다. 직접 SQL로 신규 이력을 수정하는 동작은 지원하지 않는다. UI·인증·실제 학습·실행시간 예측은 추가하지 않았다.

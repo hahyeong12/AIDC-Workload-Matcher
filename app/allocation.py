@@ -39,6 +39,18 @@ class AllocationGPU:
 
 
 @dataclass(frozen=True)
+class AllocationBasis:
+    basis_type: str
+    job_request_id: int
+    customer_id: int
+    proposal_id: int | None
+    response_id: int | None
+    gpu_model_id: int
+    gpu_count: int
+    same_server_required: bool
+
+
+@dataclass(frozen=True)
 class AllocationResult:
     allocation_id: int
     job_request_id: int
@@ -47,6 +59,7 @@ class AllocationResult:
     ended_at: datetime | None
     gpus: tuple[AllocationGPU, ...]
     replayed: bool = False
+    basis: AllocationBasis | None = None
 
 
 @dataclass(frozen=True)

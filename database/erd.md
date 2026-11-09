@@ -280,3 +280,30 @@ Job별 응답 조회 인덱스 `(job_request_id, response_id)`와 고객 FK 인�
 
 신규 테이블의 불변성은 서비스의 추가·조회 전용 인터페이스와 충돌 정책이다. DB의 일반 UPDATE/DELETE까지 새 트리거로 금지한 것은 아니며 운영 권한 제한이 필요하다. 테스트가 생성한 정확한 임시 ID의 정리 외에 서비스는 이력을 삭제하지 않는다.
 제안·응답은 allocations와 직접 연결하지 않는다. v0.3-2에서 실제 배정의 원본/수락 대안 근거와 response_id를 연결하고 당시 적용 조건을 추적해야 한다.
+
+## v0.3-2 배정 근거 (2026-11-10)
+
+004는 기존 10개 테이블을 유지하고 allocation_bases만 추가한다. 테스트 DB는 11개 테이블·FK 20개·보호 트리거 4개, 개발 DB는 8개·FK 9개·트리거 4개다.
+
+```mermaid
+erDiagram
+    job_requests ||--o{ allocations : executes
+    allocations ||--o| allocation_bases : evidence
+    allocations ||--o{ allocation_gpus : assigned
+    job_requests ||--o{ job_proposals : alternatives
+    job_proposals ||--o| proposal_responses : consent
+    job_proposals o|--o{ allocation_bases : proposed_basis
+    proposal_responses o|--o{ allocation_bases : response_evidence
+    customers ||--o{ allocation_bases : owner_snapshot
+    gpu_models ||--o{ allocation_bases : applied_model
+```
+
+| allocation_bases 컬럼 | 의미 |
+| --- | --- |
+| allocation_id | PK/FK → allocations; 할당당 최대 한 근거 |
+| basis_type | ORIGINAL / ACCEPTED_PROPOSAL, ascii_bin CHECK |
+| job_request_id / customer_id | 원본 Job·소유자 FK 및 스냅샷 |
+| proposal_id / response_id | ORIGINAL이면 모두 NULL, 대안이면 모두 NOT NULL; Proposal·응답 FK |
+| gpu_model_id / gpu_count / same_server_required | 적용 모델 FK, 양수 수량 CHECK, 배치 0/1 CHECK |
+
+Proposal FK는 (proposal_id, job_request_id, customer_id) 복합 키다. 모든 FK는 RESTRICT다. 서비스는 응답의 ACCEPTED와 정확한 Proposal/Job/고객 일치 및 원본 소유 관계·조건을 잠금 안에서 추가 검증한다. 시간은 allocations.allocated_at/ended_at과 allocation_gpus.assigned_at/released_at에 보존한다. 기존 할당에 근거를 백필하지 않고 원본 조건으로 해석한다.

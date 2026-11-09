@@ -57,6 +57,9 @@ def committed_allocations(mysql_connection):
                 rows = execute(admin, "SELECT job_request_id FROM allocations WHERE allocation_id = %s",
                                (allocation_id,))
                 assert not rows or rows[0][0] in (1, 2, 3, 4, 5)
+                if execute(admin, "SELECT TABLE_NAME FROM information_schema.TABLES "
+                           "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='allocation_bases'"):
+                    execute(admin, "DELETE FROM allocation_bases WHERE allocation_id = %s", (allocation_id,))
                 execute(admin, "DELETE FROM allocation_gpus WHERE allocation_id = %s", (allocation_id,))
                 execute(admin, "DELETE FROM allocations WHERE allocation_id = %s", (allocation_id,))
             admin.commit()

@@ -1,17 +1,17 @@
 # 테스트
 
-## 현재 재검증 결과 (2026-11-08, v0.3-1)
+## 현재 재검증 결과 (2026-11-10, v0.3-2)
 
 Windows 11 / 프로젝트 `.venv` Python 3.14.6 / pytest 9.2.0 / MySQL 8.0.46에서 직접 재실행했다.
 
 | 실행 | 결과 |
 | --- | --- |
-| `python -m pytest -q` | **230 passed, 134 skipped** |
-| `python -m pytest -q --run-mysql` | **364 passed** |
-| `python -m pytest -q -m mysql --run-mysql` | **134 passed, 230 deselected** |
+| `python -m pytest -q` | **250 passed, 162 skipped** |
+| `python -m pytest -q --run-mysql` | **412 passed** |
+| `python -m pytest -q -m mysql --run-mysql` | **162 passed, 250 deselected** |
 
-전체는 로컬 230개 + 실제 MySQL 134개다. 기존 v0.2-2의 240개(로컬 157 + MySQL 83)를 유지하고 신규 124개(로컬 73 + MySQL 51)를 추가했다. 신규는 proposal_service 43, proposal_cli 10, proposal_migration 20, mysql_proposals 42, mysql_proposal_concurrency 9개다.
-전체/통합 실행은 실패·오류·skip·경고가 없다. 기본 실행의 skip은 MySQL 미실행이다. 아래 이전 버전 절은 과거 이력이며 상세 근거는 [v0.3-1 검증 기록](../docs/v0.3-1-validation.md)을 따른다.
+전체는 로컬 250개 + 실제 MySQL 162개다. 기존 364개를 유지하고 신규 48개를 추가했다. 신규는 basis_migration 15, accepted_allocation_cli 5, mysql_accepted_allocations 21, mysql_accepted_concurrency 7개다. 기존 fixture의 허용 스키마를 11개까지 확장하고 정확한 임시 할당 ID 정리에 새 근거 행을 포함했다. 기존 업무 검증은 제거하지 않았다.
+전체/통합 실행은 실패·오류·skip·경고가 없다. 기본 실행의 skip은 MySQL 미실행이다. 아래 이전 버전 절은 과거 이력이며 최신 근거는 [v0.3-2 검증 기록](../docs/v0.3-2-validation.md)을 따른다.
 
 저장소 루트에서 설치된 가상환경으로 실행한다.
 
@@ -26,7 +26,7 @@ Windows 11 / 프로젝트 `.venv` Python 3.14.6 / pytest 9.2.0 / MySQL 8.0.46에
 
 1. 개발 DB와 다른 전용 테스트 DB 및 계정을 발급받는다. 이름은 `_test`로 끝나야 한다.
 2. `.env`에 `TEST_MYSQL_HOST/PORT/DATABASE/USER/PASSWORD`를 모두 설정한다. 개발용 값으로 대체하지 않는다.
-3. 새 빈 테스트 DB만 [DB 안내](../database/README.md)에 따라 기본 schema·트리거·seed를 한 번 준비하고 [추가 마이그레이션](../database/migrations/README.md) 002·003으로 10개 테이블을 준비한다. 현재 테스트 DB는 이미 준비되어 있으므로 재적용하지 않는다. 개발 DB에는 003을 적용하지 않는다.
+3. 새 빈 테스트 DB만 [DB 안내](../database/README.md)에 따라 기본 schema·트리거·seed를 한 번 준비하고 [추가 마이그레이션](../database/migrations/README.md) 002·003·004로 11개 테이블을 준비한다. 현재 테스트 DB는 이미 준비되어 있으므로 재적용하지 않는다. 개발 DB에는 003·004를 적용하지 않는다.
 4. 연결 확인 후 테스트를 실행한다.
 
 ```powershell
@@ -35,7 +35,7 @@ Windows 11 / 프로젝트 `.venv` Python 3.14.6 / pytest 9.2.0 / MySQL 8.0.46에
 ```
 
 명시적으로 통합 테스트를 켠 경우 설정·연결·스키마 문제는 skip하지 않고 실패로 처리한다.
-검증 대상은 총 10개 테이블·14개 FK의 참조 관계, PK/UNIQUE/CHECK, GPU 수량·배치·상태, 원본 보호와 배정·반환·제안·응답·동시성이다. 업무 규칙과 직접 SQL 제약 검증을 구분한다.
+검증 대상은 총 11개 테이블·20개 FK의 참조 관계, PK/UNIQUE/CHECK, GPU 수량·배치·상태, 원본 보호와 배정·반환·제안·응답·배정 근거·동시성이다. 업무 규칙과 직접 SQL 제약 검증을 구분한다.
 SQLite나 모의 객체 결과를 MySQL 무결성 검증으로 취급하지 않는다.
 
 일반 테스트는 UUID가 포함된 자기 데이터만 INSERT하고 끝나면 전체 ROLLBACK한다. 원본 UPDATE/DELETE 거부 테스트도 해당 테스트가 만든 행에만 시도한다. 기존 행을 수정하거나 삭제하지 않는다.

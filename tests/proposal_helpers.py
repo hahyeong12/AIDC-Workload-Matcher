@@ -14,7 +14,7 @@ from mysql_audit import snapshot
 
 @pytest.fixture
 def proposal_case(db, sample):
-    assert inspect(db)["schema_version"] == "v0.3-1", "Prepare test-only 003 migration first"
+    assert inspect(db)["schema_version"] in ("v0.3-1", "v0.3-2"), "Prepare test-only 003 migration first"
     second = execute(db, "INSERT INTO servers (server_name) VALUES (%s)", (sample["token"] + "second",))
     ids = [sample["gpu"]]
     for index, server in enumerate([sample["server"], sample["server"], second, second]):
@@ -37,7 +37,7 @@ def proposal_case(db, sample):
 @pytest.fixture
 def live_proposals(mysql_connection):
     """Commit only owned proposals for unchanged seed Jobs; restore full snapshot."""
-    assert inspect(mysql_connection)["schema_version"] == "v0.3-1"
+    assert inspect(mysql_connection)["schema_version"] in ("v0.3-1", "v0.3-2")
     mysql_connection.rollback()
     owned, guard = set(), Lock()
     with closing(connect_database("TEST_MYSQL_")) as admin:

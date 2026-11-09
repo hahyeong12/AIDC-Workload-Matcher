@@ -1,10 +1,10 @@
-"""Atomic allocation/return of original requests, with conservative availability."""
+"""Atomic original/accepted-proposal allocation and return, with evidence."""
 
 from contextlib import contextmanager
 from dataclasses import replace
 
 from app.allocation import (
-    AllocationConflict, AllocationIntegrityError, InsufficientResources,
+    AllocationBasis, AllocationConflict, AllocationIntegrityError, InsufficientResources,
     ResourceAvailability, TransactionInProgress,
 )
 from app.db import database_step
@@ -73,7 +73,7 @@ def allocation_transaction(connection):
 
 def validate_allocation(record, requirement):
     if len(record.gpus) != requirement.gpu_count:
-        raise AllocationIntegrityError("할당 GPU 수량이 원본과 다릅니다. 기존 기록을 보존하고 점검하세요.")
+        raise AllocationIntegrityError("할당 GPU 수량이 적용 조건과 다릅니다. 기존 기록을 보존하고 점검하세요.")
     if requirement.same_server_required and len({gpu.server_id for gpu in record.gpus}) != 1:
         raise AllocationIntegrityError("기존 할당의 동일 서버 조건이 위반되었습니다.")
     if record.status == "ACTIVE":
@@ -85,7 +85,7 @@ def validate_allocation(record, requirement):
 
 
 class AllocationService:
-    """One original Job runs once; repeats return its existing active/final result."""
+    """One execution per Job; the same source replays, a different source conflicts."""
 
     def __init__(self, connection):
         self.connection = connection
@@ -100,6 +100,48 @@ class AllocationService:
         inventory = self.repository.lock_inventory(requirement.gpu_model_id)
         return requirement, inventory
 
+    def basis_for(self, original, proposal_id=None, customer_id=None, *, lock=False):
+        # Lazy imports avoid the proposal service's shared transaction dependency.
+        from app.repositories.proposals import ProposalRepository
+        from app.services.proposals import validate_proposal
+        repo = ProposalRepository(self.connection)
+        owner = repo.owner(original.job_request_id)
+        if proposal_id is None:
+            return AllocationBasis("ORIGINAL", original.job_request_id, owner, None, None,
+                                   original.gpu_model_id, original.gpu_count, original.same_server_required)
+        if customer_id != owner:
+            raise AllocationConflict("배정 고객이 원본 Job의 고객과 다릅니다. 고객 ID는 인증을 대신하지 않습니다.")
+        proposal = repo.get_proposal(proposal_id, lock=lock)
+        if proposal.job_request_id != original.job_request_id or proposal.customer_id != owner:
+            raise AllocationConflict("대안의 Job·고객 관계가 원본 요청과 다릅니다.")
+        validate_proposal(proposal, original)
+        response = repo.response_for(proposal_id, lock=lock)
+        if (response is None or response.decision != "ACCEPTED"
+                or response.job_request_id != original.job_request_id or response.customer_id != owner):
+            raise AllocationConflict("해당 Job 고객의 ACCEPTED 응답이 필요합니다.")
+        return AllocationBasis("ACCEPTED_PROPOSAL", original.job_request_id, owner, proposal_id,
+                               response.response_id, proposal.gpu_model_id, proposal.gpu_count,
+                               proposal.same_server_required)
+
+    def applied_requirement(self, record, original, *, lock=False):
+        basis = record.basis
+        if basis is None:
+            # Pre-004 rows are original executions. No backfill or history rewrite.
+            return original
+        expected = self.basis_for(original, basis.proposal_id, basis.customer_id, lock=lock)
+        if basis != expected or basis.job_request_id != record.job_request_id:
+            raise AllocationIntegrityError("배정 근거·고객 수락·적용 조건이 일치하지 않습니다.")
+        return replace(original, gpu_model_id=basis.gpu_model_id, gpu_count=basis.gpu_count,
+                       same_server_required=basis.same_server_required)
+
+    def detail(self, allocation_id):
+        record = self.repository.get_allocation(parse_job_id(allocation_id))
+        original = self.repository.get_requirement(record.job_request_id)
+        requirement = self.applied_requirement(record, original)
+        validate_allocation(record, requirement)
+        # Expose explicit ORIGINAL evidence for old records without writing it.
+        return record if record.basis else replace(record, basis=self.basis_for(original))
+
     def allocate(self, job_id):
         job_id = parse_job_id(job_id)
         with allocation_transaction(self.connection):
@@ -107,11 +149,39 @@ class AllocationService:
             existing = self.repository.latest_for_job(job_id)
             if existing is not None:
                 result = self.repository.get_allocation(existing, lock=True, replayed=True)
+                if result.basis and result.basis.basis_type != "ORIGINAL":
+                    raise AllocationConflict("이 Job은 이미 수락 대안으로 실행되었습니다.")
+                self.applied_requirement(result, requirement)
             else:
                 available = evaluate_availability(
                     requirement, inventory, self.repository.occupied_gpu_ids(requirement.gpu_model_id))
                 selected = choose_gpus(available)
                 allocation_id = self.repository.create(job_id, selected)
+                if self.repository.has_bases():
+                    self.repository.create_basis(allocation_id, self.basis_for(requirement))
+                result = self.repository.get_allocation(allocation_id, lock=True)
+            validate_allocation(result, requirement)
+        return result
+
+    def allocate_proposal(self, job_id, proposal_id, customer_id):
+        job_id, proposal_id, customer_id = map(parse_job_id, (job_id, proposal_id, customer_id))
+        with allocation_transaction(self.connection):
+            if not self.repository.has_bases():
+                raise AllocationConflict("수락 대안 배정에는 004 마이그레이션이 필요합니다.")
+            original, inventory = self.locked_context(job_id)
+            basis = self.basis_for(original, proposal_id, customer_id, lock=True)
+            requirement = replace(original, gpu_model_id=basis.gpu_model_id, gpu_count=basis.gpu_count,
+                                  same_server_required=basis.same_server_required)
+            existing = self.repository.latest_for_job(job_id)
+            if existing is not None:
+                result = self.repository.get_allocation(existing, lock=True, replayed=True)
+                if result.basis != basis:
+                    raise AllocationConflict("이 Job에는 다른 배정 근거의 실행 이력이 있습니다.")
+            else:
+                available = evaluate_availability(requirement, inventory,
+                    self.repository.occupied_gpu_ids(requirement.gpu_model_id))
+                allocation_id = self.repository.create(job_id, choose_gpus(available))
+                self.repository.create_basis(allocation_id, basis)
                 result = self.repository.get_allocation(allocation_id, lock=True)
             validate_allocation(result, requirement)
         return result
@@ -124,9 +194,10 @@ class AllocationService:
             # Discover the immutable Job reference without taking a lock out of
             # order. Re-read the allocation under locks before any mutation.
             initial = self.repository.get_allocation(allocation_id)
-            requirement, _ = self.locked_context(initial.job_request_id)
+            original, _ = self.locked_context(initial.job_request_id)
+            requirement = self.applied_requirement(initial, original, lock=True)
             current = self.repository.get_allocation(allocation_id, lock=True)
-            if current.job_request_id != initial.job_request_id:
+            if current.job_request_id != initial.job_request_id or current.basis != initial.basis:
                 raise AllocationConflict("할당의 원본 Job 관계가 변경되었습니다.")
             validate_allocation(current, requirement)
             if current.status != "ACTIVE":

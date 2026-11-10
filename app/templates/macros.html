@@ -1,0 +1,10 @@
+{% macro action(name, label, job_id, customer_id, proposal_id=none, allocation_id=none, allowed=true, secondary=false) -%}
+<form method="post" action="{{ url_for('job_action', job_id=job_id, action=name) }}" class="inline-form" data-once>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="customer_id" value="{{ customer_id }}">
+  {% if proposal_id is not none %}<input type="hidden" name="proposal_id" value="{{ proposal_id }}">{% endif %}
+  {% if allocation_id is not none %}<input type="hidden" name="allocation_id" value="{{ allocation_id }}">{% endif %}
+  <button class="button {{ 'secondary' if secondary }}" {% if not policy.writable or not allowed %}disabled title="쓰기 설정·스키마·현재 처리 상태를 확인하세요"{% endif %}>{{ label }}</button>
+</form>
+{%- endmacro %}
+{% macro placement(value) %}{{ '동일 서버 필수' if value else '분산 배치 허용' }}{% endmacro %}

@@ -120,3 +120,13 @@ InnoDB의 자동 증가 카운터는 롤백해도 되돌아가지 않아 테스�
 `test_job_service.py`, `test_job_cli.py`, `test_mysql_jobs.py`가 입력 경계·원자성·조회·기존 서비스 호환성을 검증한다.
 신규 불변 Job은 실제 커밋하지 않는다. 기존 RollbackEnvelope 또는 독립 연결의 커밋 경계 롤백으로 테스트 데이터를 남기지 않으며 트리거는 계속 활성화한다.
 조회 CLI만 실제 하위 프로세스로 검증한다. 등록 CLI의 영구 커밋 후 재조회 제한, 동시성 검증 방식과 전체 DB 보존 결과는 [검증 기록](../docs/v0.4-1-validation.md)에 설명한다.
+
+## v0.4-2 Flask 검증
+
+`test_web.py`는 Flask 클라이언트의 화면·서비스 호출·입력·CSRF/XSS·관계·스키마·쓰기 차단·연결 정리를 검증한다.
+`test_mysql_web.py`는 실제 MySQL의 웹 등록·가용성·대안·응답·원본/수락 배정·반환·오류 롤백을 검증한다.
+새 WebRollbackConnection은 조회와 서비스 경계를 SAVEPOINT로 감싸며, 기존 fixture가 외부 트랜잭션을 롤백한다.
+TESTING·명시적 롤백 전용 설정·연결 표식이 없는 일반 웹 서버는 테스트 DB에 쓰지 못한다.
+개발 DB는 정상 8개 구성의 읽기 전용 페이지·쓰기 거부 검증만 한다.
+기존 506개 테스트 파일·fixture·보호 트리거는 수정하지 않았다.
+[v0.4-2 검증 기록](../docs/v0.4-2-validation.md)에 전체 결과와 Chrome 확인 범위를 기록한다.

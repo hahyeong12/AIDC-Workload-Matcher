@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block title %}등록 전 확인{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">REVIEW & SUBMIT</div><h1>등록 전 확인</h1><p>이 내용으로 원본 요청과 GPU 조건을 함께 저장합니다.</p></div><span class="badge neutral">02 확인</span></div>
+<section class="panel form-panel"><h2>{{ values[1] }}</h2><p class="muted">고객 #{{ values[0] }}</p><h3>고객 원본 요청</h3><pre class="original">
+{{ values[2] }}</pre><dl class="facts"><div><dt>GPU 모델</dt><dd>{{ model.manufacturer }} {{ model.model_name }}</dd></div><div><dt>GPU 수량</dt><dd>{{ values[4] }}개</dd></div><div><dt>배치 조건</dt><dd>{{ '동일 서버 필수' if values[5] else '분산 배치 허용' }}</dd></div></dl><div class="notice">등록 후 원본 수정·삭제는 불가능합니다. 동일 내용의 새 제출은 별도 Job입니다. 자원이 부족해도 요청을 등록할 수 있습니다.</div>
+<form method="post" action="{{ url_for('job_register') }}" data-once><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="ticket" value="{{ ticket }}"><div class="form-actions"><a class="button secondary" href="{{ url_for('job_new', customer_id=customer_id) }}">다시 작성</a><button class="button" {% if not policy.writable %}disabled{% endif %}>확인하고 영구 등록</button></div></form></section>
+{% endblock %}

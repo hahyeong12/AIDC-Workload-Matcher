@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}운영 대시보드{% endblock %} · AIDC</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='workspace.css') }}">
+  <script src="{{ url_for('static', filename='workspace.js') }}" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+<aside class="sidebar">
+  <a class="brand" href="{{ url_for('dashboard') }}"><span class="brand-icon">A</span><span>AIDC<span class="brand-sub">WORKLOAD MATCHER</span></span></a>
+  <div class="nav-heading">워크스페이스</div>
+  <nav aria-label="주 메뉴">
+    <a class="{{ 'active' if request.endpoint == 'dashboard' }}" href="{{ url_for('dashboard', customer_id=customer_id) if customer_id else url_for('dashboard') }}"><span>▦</span> 운영 대시보드</a>
+    <a class="{{ 'active' if request.endpoint in ('job_new','job_preview') }}" href="{{ url_for('job_new', customer_id=customer_id) if customer_id else url_for('job_new') }}"><span>＋</span> 신규 Job 등록</a>
+  </nav>
+  <div class="sidebar-bottom"><span class="dot"></span> LOCAL DEMO <span class="version">v0.4-2</span><p>고객 선택은 시연용입니다.<br>실제 로그인·인증을 제공하지 않습니다.</p></div>
+</aside>
+<div class="workspace">
+  <header class="topbar"><span>데이터센터 운영 <span class="slash">/</span> 고객 워크로드</span><span class="badge neutral">127.0.0.1 · 로컬 전용</span></header>
+  <main id="main">
+    {% if policy %}<div class="safety {{ 'enabled' if policy.writable }}"><span class="badge {{ 'good' if policy.writable else 'neutral' }}">{{ '쓰기 활성' if policy.writable else '읽기 전용' }}</span><span>{{ policy.reason }}</span><span class="schema">{{ policy.version }}{% if not policy.advanced %} · 대안·근거 기능 제한{% endif %}</span></div>{% endif %}
+    {% for category, message in get_flashed_messages(with_categories=true) %}<div class="notice {{ category }}" role="status">{{ message }}</div>{% endfor %}
+    {% block content %}{% endblock %}
+    <footer>원본 요청 보존 · 조건 기반 매칭 · 트랜잭션 배정 <span>AIDC Workload Matcher / DB Term Project</span></footer>
+  </main>
+</div>
+</body>
+</html>

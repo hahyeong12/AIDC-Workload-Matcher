@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}신규 Job 등록{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">NEW WORKLOAD</div><h1>신규 Job 등록</h1><p>고객 원문과 제출한 GPU 조건을 각각 보존합니다.</p></div><span class="badge neutral">01 작성 → 02 확인 → 03 등록</span></div>
+{% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="{{ url_for('job_preview') }}" class="panel form-panel">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <h2>작업 요청</h2><p class="muted">원문을 해석해 GPU 조건을 자동으로 변경하지 않습니다. * 필수 입력</p>
+  <label for="customer_id">시연 고객 *</label><select id="customer_id" name="customer_id" required><option value="" {% if not customer_id %}selected{% endif %}>고객을 선택하세요</option>{% for customer in customers %}<option value="{{ customer.customer_id }}" {% if customer.customer_id == customer_id %}selected{% endif %}>{{ customer.display_name }} · #{{ customer.customer_id }}</option>{% endfor %}</select>
+  <label for="title">작업 제목 *</label><input id="title" name="title" maxlength="200" value="{{ values.get('title','') }}" placeholder="예: H100 단일 서버 학습" required><small>최대 200자. 등록한 원본은 수정·삭제할 수 없습니다.</small>
+  <label for="original_request">고객 원본 요청 문장 *</label><textarea id="original_request" name="original_request" rows="5" placeholder="고객이 제출한 문장을 그대로 입력하세요." required>
+{{ values.get('original_request','') }}</textarea><small>UTF-8 최대 65,535바이트. 공백·줄바꿈을 그대로 보존합니다.</small>
+  <div class="divider"></div><h2>명시적 GPU 조건</h2>
+  <label for="gpu_model_id">GPU 모델 *</label><select id="gpu_model_id" name="gpu_model_id" required><option value="">모델을 선택하세요</option>{% for model in models %}<option value="{{ model.gpu_model_id }}" {% if values.get('gpu_model_id') == model.gpu_model_id|string %}selected{% endif %}>{{ model.manufacturer }} {{ model.model_name }} · {{ model.memory_gb }} GB</option>{% endfor %}</select>
+  <div class="form-grid"><div><label for="gpu_count">GPU 수량 *</label><input id="gpu_count" name="gpu_count" type="number" min="1" max="2147483647" step="1" value="{{ values.get('gpu_count','1') }}" required></div><div><label for="same_server_required">배치 조건 *</label><select id="same_server_required" name="same_server_required" required><option value="1" {% if values.get('same_server_required','1') == '1' %}selected{% endif %}>동일 서버 필수</option><option value="0" {% if values.get('same_server_required') == '0' %}selected{% endif %}>분산 배치 허용</option></select></div></div>
+  <div class="form-actions"><a class="button secondary" href="{{ url_for('dashboard', customer_id=customer_id) }}">목록으로</a><button class="button">입력 내용 확인 →</button></div>
+</form>
+{% endblock %}

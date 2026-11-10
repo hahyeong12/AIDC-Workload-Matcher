@@ -108,3 +108,15 @@ python -m pytest -q --run-mysql
 신규 테스트 실행 전후 별도 읽기 전용 연결에서 두 DB의 전체 행·테이블 정의·트리거 지문이 모두 같음을 확인했다. seed와 기존 행은 변경하지 않았고 임시 행은 모두 롤백했다.
 InnoDB의 자동 증가 카운터는 롤백해도 되돌아가지 않아 테스트 DB의 다음 번호에는 간격이 생길 수 있다. 개발 DB에는 INSERT하지 않았다.
 상세 결과와 실행 명령은 [v0.2-1 검증 기록](../docs/v0.2-1-validation.md)에 정리했다.
+
+## v0.4-1 신규 Job 등록 검증
+
+```powershell
+.\.venv\Scripts\python.exe -B -m pytest -q --run-mysql -p no:cacheprovider
+.\.venv\Scripts\python.exe -B -m pytest -q -m mysql --run-mysql -p no:cacheprovider
+```
+
+기존 412개를 유지하고 94개(단위 60개·MySQL 34개)를 추가했다.
+`test_job_service.py`, `test_job_cli.py`, `test_mysql_jobs.py`가 입력 경계·원자성·조회·기존 서비스 호환성을 검증한다.
+신규 불변 Job은 실제 커밋하지 않는다. 기존 RollbackEnvelope 또는 독립 연결의 커밋 경계 롤백으로 테스트 데이터를 남기지 않으며 트리거는 계속 활성화한다.
+조회 CLI만 실제 하위 프로세스로 검증한다. 등록 CLI의 영구 커밋 후 재조회 제한, 동시성 검증 방식과 전체 DB 보존 결과는 [검증 기록](../docs/v0.4-1-validation.md)에 설명한다.

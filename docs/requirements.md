@@ -118,3 +118,11 @@ FR-02·FR-04·FR-07·FR-08은 원본 조건에 대한 조회·배정 범위를 �
 - CLI: allocate, allocate-proposal, detail, job-history, history, complete, fail. 고객 ID는 인증이 아니다.
 - 기존 364개를 유지하고 실제 Job 003 분산 4개/동일 서버 3개, Job 005 A100 2개 배정·반환을 검증한다.
 - 개발 DB는 읽기 전용 8개를 유지한다. 004는 백업 및 기존 10개 정의·모든 행 검사 후 테스트 DB에만 적용한다.
+
+## v0.4-1 신규 Job 등록·조회 구현
+
+- 기존 고객·GPU 모델을 참조하는 신규 Job을 Python 서비스·CLI로 등록한다. 입력은 customer_id, title, original_request, gpu_model_id, gpu_count, same_server_required다.
+- 원본과 구조화된 요구조건을 한 트랜잭션으로 저장하고 AUTO_INCREMENT ID를 반환한다. 원문 해석·보정·UPDATE/DELETE는 제공하지 않는다.
+- 잘못된 형식·범위·빈 문자열·길이 초과·없는 FK를 거부하며 두 번째 INSERT 실패 시 첫 행도 롤백한다. 같은 내용의 재제출은 별도 Job이다.
+- 상세·고객별 목록을 제공하고 신규 ID로 기존 매칭·대안·동의·배정을 이용한다. 인증·Flask UI·새 마이그레이션은 이번 범위 밖이다.
+- [v0.4-1 검증 기록](v0.4-1-validation.md)을 수용 기준과 실제 시험 결과로 사용한다.

@@ -1,7 +1,11 @@
-# 애플리케이션 v0.3-1
+# 애플리케이션 v0.4-1
 
 `db.py`의 기존 환경변수 기반 연결을 사용해 원본 GPU 요구조건의 하드웨어 수량·배치를 검사합니다.
-v0.2-1 하드웨어 매칭과 v0.2-2 원본 조건 배정·반환 CLI를 유지합니다. v0.3-1은 별도 CLI로 같은 모델의 대안 생성·고객 의사 기록을 제공합니다. 예약·수락 대안의 실제 배정·시간 예측·Flask UI·실제 학습 실행은 포함하지 않습니다.
+v0.2-1 하드웨어 매칭과 v0.2-2 원본 조건 배정·반환 CLI를 유지합니다. v0.3-1은 같은 모델의 대안·고객 의사를, v0.3-2는 수락 대안의 실제 배정·근거를 제공합니다. v0.4-1은 신규 Job 등록·상세·고객별 목록 CLI를 추가합니다. 예약·시간 예측·Flask UI·실제 학습 실행은 포함하지 않습니다.
+
+신규 등록은 `python -m app.job_cli --test register --customer-id 1 --title '학습' --original-request '고객 원문' --gpu-model-id 1 --gpu-count 2 --same-server-required 1`입니다.
+등록은 원본을 영구 보존하므로 자동 검증에는 pytest를 사용합니다. 상세는 `python -m app.job_cli --test detail 1`, 고객 목록은 `python -m app.job_cli --test list 1`입니다.
+등록 결과의 `job_request_id`를 기존 CLI에 그대로 전달합니다. [입력 제한·트랜잭션·검증 한계](../docs/v0.4-1-validation.md)를 확인하세요. 실제 사용자 인증은 포함하지 않습니다.
 
 ```powershell
 # 개발 DB: 읽기 전용 검사

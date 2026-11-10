@@ -21,13 +21,17 @@
 | 화면 | HTML/CSS/JavaScript | 자원 조회, 요청 등록, 대안 확인 및 수락 |
 | 협업 | GitHub | 소스 버전 관리 및 변경 검토 |
 
-## v0.3-2 현재 구조
+## v0.4-1 현재 구조
+
+`app.job_cli`로 신규 요청·명시적 GPU 조건을 원자적으로 등록하고 Job 상세·고객별 목록을 조회합니다.
+원본 문장은 그대로 보존하며 기존 매칭·대안·동의·배정 서비스에 새 ID를 전달합니다.
+[신규 등록 사용법과 검증 기록](docs/v0.4-1-validation.md)을 참고하세요.
 
 고객이 수락한 대안 조건으로 실제 GPU를 배정하고 원본 Job·Proposal·ACCEPTED 응답·할당을 연결합니다. **대안 생성·수락은 GPU를 예약하지 않습니다.** 실제 배정 시 잠금 후 현재 가용성을 다시 검사합니다. 기존 원본 조건 배정과 완료·실패·반환 기능을 유지합니다. CLI 고객 ID는 관계 검사용이며 실제 인증이 아닙니다.
 
 004의 `allocation_bases`는 ORIGINAL / ACCEPTED_PROPOSAL 근거, 고객·Proposal·응답 ID와 적용 모델·수량·배치 조건을 저장합니다. 기존 10개 테이블은 ALTER하거나 백필하지 않습니다. 개발 DB는 **8개 테이블·트리거 4개**, 테스트 DB는 **11개 테이블·트리거 4개**입니다. 개발 DB에는 003·004를 적용하지 않았습니다.
 
-기존 364개를 포함한 전체 **412개** 테스트가 통과했습니다. 실제 결과와 제한은 [v0.3-2 검증 기록](docs/v0.3-2-validation.md)을 참고합니다. 웹 UI·실제 GPU 연산·실행시간 예측은 이번 범위에 없습니다.
+기존 412개를 포함한 전체 **506개** 테스트가 통과했습니다. 이전 배정 검증은 [v0.3-2 기록](docs/v0.3-2-validation.md)에 있습니다. 웹 UI·실제 GPU 연산·실행시간 예측은 이번 범위에 없습니다.
 
 ```powershell
 # 아래 쓰기는 전용 테스트 DB 예시입니다. P는 이미 수락한 Proposal ID입니다.
@@ -203,7 +207,7 @@ Copy-Item .env.example .env
 MySQL 8.0.16 이상이 필요하며, 이번 재검증 환경은 Windows 11 / Python 3.14.6 / MySQL 8.0.46입니다. `requirements.txt`의 네 패키지 버전과 설치 버전이 일치하고 `pip check`가 통과했습니다. 지원 대상으로 둔 다른 Python 버전은 아직 실행 검증하지 않았습니다.
 새 빈 DB에 적용하는 방법과 별도 테스트 DB 준비는 [DB 안내](database/README.md), 실제 통합 테스트 실행은 [테스트 안내](tests/README.md)를 따릅니다.
 테이블만 생성되고 트리거 생성이 실패했다면 전체 초기화를 반복하지 말고 [MySQL 부분 스키마 복구 안내](docs/mysql-recovery.md)를 확인합니다. 기본 점검 명령은 `python -m database.recover`이며 읽기 전용입니다.
-현재 전체 검증은 `python -m pytest -q --run-mysql`로 **412 passed**입니다. 실제 MySQL만 실행하면 **162 passed, 250 deselected**입니다. 기본 실행의 MySQL skip은 성공으로 계산하지 않습니다. Windows 테스트는 실행마다 새 `.pytest-tmp/` 하위 경로를 사용합니다.
+현재 전체 검증은 `python -m pytest -q --run-mysql`로 **506 passed**입니다. 실제 MySQL 테스트는 196개이며, 신규 94개 중 단위 60개·MySQL 34개입니다. 기본 실행의 MySQL skip은 성공으로 계산하지 않습니다. Windows 테스트는 실행마다 새 `.pytest-tmp/` 하위 경로를 사용합니다.
 
 ### VS Code와 PowerShell
 

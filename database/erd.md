@@ -3,6 +3,8 @@
 MySQL 8.0.16 이상, InnoDB, `utf8mb4`를 사용한다. v0.1 기본 테이블의 모든 컬럼은 `NOT NULL`이다. 종료·해제 시각과 활성 할당·수락의 조건부 UNIQUE용 생성 컬럼은 NULL을 허용한다.
 시간은 연결 세션을 UTC로 설정해 저장·조회한다. SQL 명세는 [schema.sql](schema.sql), 가상 데이터는 [seed.sql](seed.sql)에 있다.
 
+> **현행 ERD 정본:** 이 파일은 기존 11개 테이블의 관계를 설명합니다(현재 개발 DB는 8개, 자동 테스트 DB는 11개). [마스터 계획](../docs/PROJECT_MASTER_PLAN.md)의 `server_resource_capacities`, `job_compute_requirements`, `allocation_server_resources`는 M1 미확정·미구현의 3개 **추가 테이블 제안**이며 현재 ERD의 객체 수에 포함하지 않습니다. 신규 키·단위·레거시 처리·원본 보호·용량 합계 보장 수준은 별도로 승인한 뒤 목표 ERD에 반영합니다.
+
 ```mermaid
 erDiagram
     customers ||--o{ job_requests : submits

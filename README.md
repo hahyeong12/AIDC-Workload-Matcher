@@ -3,6 +3,14 @@
 컴퓨터공학과 데이터베이스 텀프로젝트로 개발하는 AI 데이터센터(AIDC) 작업 매칭 및 자원 배정 시스템입니다.
 고객의 AI 학습 작업 요청을 데이터센터의 실제 GPU 자원과 운영 조건에 비교하여 실행 가능성을 판단하고, 가능한 실행 계획과 대안을 제시합니다.
 
+## 설계 로드맵과 협업 기준
+
+- [PROJECT_MASTER_PLAN.md](docs/PROJECT_MASTER_PLAN.md): 승인된 상위 방향·M0~M5 로드맵·개별 승인 대상인 복합 자원 설계.
+- [요구사항](docs/requirements.md) · [아키텍처](docs/architecture.md) · [설계 결정](docs/decisions.md) · [실제 ERD](database/erd.md): 현행 구현의 상세 정본.
+- [AGENTS.md](AGENTS.md) · [CLAUDE.md](CLAUDE.md): 에이전트 작업·독립 리뷰 지침.
+
+**현재 구현은 GPU 중심 v0.4-2입니다.** GPU·CPU·RAM을 위한 추가 3개 테이블은 아직 제안으로, 문서 반영이 DB 변경 허가는 아닙니다. 개발 DB는 8개, 테스트 DB는 11개 테이블입니다.
+
 ## 프로젝트 목적
 
 - GPU를 개별 장비로 관리하고 모델, 소속 서버, 장비 상태를 기록합니다.

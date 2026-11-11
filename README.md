@@ -8,8 +8,9 @@
 - [PROJECT_MASTER_PLAN.md](docs/PROJECT_MASTER_PLAN.md): 승인된 상위 방향·M0~M5 로드맵·개별 승인 대상인 복합 자원 설계.
 - [요구사항](docs/requirements.md) · [아키텍처](docs/architecture.md) · [설계 결정](docs/decisions.md) · [실제 ERD](database/erd.md): 현행 구현의 상세 정본.
 - [AGENTS.md](AGENTS.md) · [CLAUDE.md](CLAUDE.md): 에이전트 작업·독립 리뷰 지침.
+- [기기 전환 시작 루틴](docs/ENVIRONMENT_HANDOFF.md): 노트북·데스크톱에서 Git·Python·DB 진행 수준을 먼저 대조하는 절차.
 
-**현재 구현은 GPU 중심 v0.4-2입니다.** GPU·CPU·RAM을 위한 추가 3개 테이블은 아직 제안으로, 문서 반영이 DB 변경 허가는 아닙니다. 개발 DB는 8개, 테스트 DB는 11개 테이블입니다.
+**현재 구현은 GPU 중심 v0.4-2입니다.** GPU·CPU·RAM을 위한 추가 3개 테이블은 아직 제안으로, 문서 반영이 DB 변경 허가는 아닙니다. 2026-11-11 확인 기준 개발 DB는 양쪽 8개, 테스트 DB는 노트북 11개·데스크톱 10개로 다르며, 현재 상태는 기기 전환 때 재검증해야 합니다.
 
 ## 프로젝트 목적
 

@@ -12,6 +12,18 @@
 
 **현재 구현은 GPU 중심 v0.4-2입니다.** GPU·CPU·RAM을 위한 추가 3개 테이블은 아직 제안으로, 문서 반영이 DB 변경 허가는 아닙니다. **노트북 2026-11-12 실측/데스크톱 2026-11-11 보고 기준** 두 컴퓨터의 개발 DB는 각각 8개, 테스트 DB는 각각 11개입니다. 기기별 Git·Python·MySQL 최신 상태는 [환경 전환 시작 루틴](docs/ENVIRONMENT_HANDOFF.md)으로 재확인합니다.
 
+### 현재 노트북·데스크톱 Python 실행 경로
+
+OneDrive 밖 각 컴퓨터의 **독립된 가상환경**을 사용합니다. 프로젝트 루트에서 아래를 먼저 실행해 현재 PowerShell 세션에 `$projectPython`을 지정하면 이 README의 모든 실행 예시를 그대로 사용할 수 있습니다.
+
+```powershell
+$venvName = 'AIDC-Workload-Matcher-laptop'  # 데스크톱일 때는 'AIDC-Workload-Matcher-desktop'
+$projectPython = "$env:LOCALAPPDATA\venvs\$venvName\Scripts\python.exe"
+& $projectPython --version
+```
+
+기기별 전용 venv가 없으면 먼저 [환경 전환 시작 루틴](docs/ENVIRONMENT_HANDOFF.md)에 따라 생성·설치합니다. 활성화된 Anaconda `(base)`의 `python`을 대신 사용하지 마세요. 아래 테스트 DB 대상 쓰기 CLI 예시는 이력에 영향을 줄 수 있으므로 **별도 승인·격리 없이 실행하지 않습니다**.
+
 ## 프로젝트 목적
 
 - GPU를 개별 장비로 관리하고 모델, 소속 서버, 장비 상태를 기록합니다.
@@ -36,10 +48,9 @@ Flask·Jinja2 한국어 화면에서 고객 선택, 자원·Job 조회, 등록 �
 **웹 쓰기는 기본 차단**이며 현재 8개 테이블의 개발 DB는 읽기 전용으로 사용합니다.
 
 ```powershell
-# VS Code에서 열어둔 프로젝트 폴더에서 실행 (노트북·데스크톱 각각의 전용 venv)
+# 위 '현재 노트북·데스크톱 Python 실행 경로'에서 $projectPython 설정 후
 $env:WEB_ENABLE_WRITES = '0'
-$venvName = 'AIDC-Workload-Matcher-laptop'  # 데스크톱에서는 -desktop
-& "$env:LOCALAPPDATA\venvs\$venvName\Scripts\python.exe" -B -m app.web
+& $projectPython -B -m app.web
 ```
 
 접속 주소: **http://127.0.0.1:5000/**. Debug·자동 초기화·자동 마이그레이션은 사용하지 않습니다.
@@ -58,12 +69,12 @@ $venvName = 'AIDC-Workload-Matcher-laptop'  # 데스크톱에서는 -desktop
 
 ```powershell
 # 아래 쓰기는 전용 테스트 DB 예시입니다. P는 이미 수락한 Proposal ID입니다.
-.\.venv\Scripts\python.exe -m app.allocation_cli --test allocate 001
-.\.venv\Scripts\python.exe -m app.allocation_cli --test allocate-proposal 003 --proposal-id P --customer-id 2
-.\.venv\Scripts\python.exe -m app.allocation_cli --test detail A
-.\.venv\Scripts\python.exe -m app.allocation_cli --test job-history 003
-.\.venv\Scripts\python.exe -m app.allocation_cli --test history G
-.\.venv\Scripts\python.exe -m app.allocation_cli --test complete A
+& $projectPython -m app.allocation_cli --test allocate 001
+& $projectPython -m app.allocation_cli --test allocate-proposal 003 --proposal-id P --customer-id 2
+& $projectPython -m app.allocation_cli --test detail A
+& $projectPython -m app.allocation_cli --test job-history 003
+& $projectPython -m app.allocation_cli --test history G
+& $projectPython -m app.allocation_cli --test complete A
 ```
 
 A는 할당 ID, G는 GPU ID입니다. `detail`은 근거·적용 조건·실제 GPU·배정/반환 시각을 함께 반환합니다. `job-history`는 Job의 과거 할당, `history`는 GPU의 사용 이력을 조회합니다. 같은 Job·같은 근거의 반복 배정은 종료 후에도 기존 결과를 반환하고 다른 근거는 충돌로 처리합니다. 예시를 직접 실행하면 새 이력이 남으므로 통합 테스트 전 전용 DB의 상태를 확인하세요.
@@ -156,8 +167,8 @@ Flask 실행 진입점·웹 UI는 v0.4-2에서 제공합니다. 미래 예약은
 ## 하드웨어 조건 검사
 
 ```powershell
-.\.venv\Scripts\python.exe -m app.match_cli 001
-.\.venv\Scripts\python.exe -m app.match_cli 003 --test
+& $projectPython -m app.match_cli 001
+& $projectPython -m app.match_cli 003 --test
 ```
 
 숫자 Job ID로 MySQL의 원본 요구조건과 해당 모델의 개별 GPU·서버 상태를 조회합니다.
@@ -172,11 +183,11 @@ JSON 결과는 `HARDWARE_FEASIBLE` 또는 `HARDWARE_INSUFFICIENT`이며 설명, 
 
 ```powershell
 # 읽기 전용: 현재 가용성
-.\.venv\Scripts\python.exe -m app.allocation_cli --test available 001
+& $projectPython -m app.allocation_cli --test available 001
 # 쓰기: 원본 Job 1을 배정하고 출력된 allocation_id로 정상 완료 처리
-$allocation = .\.venv\Scripts\python.exe -m app.allocation_cli --test allocate 001 | ConvertFrom-Json
-.\.venv\Scripts\python.exe -m app.allocation_cli --test complete $allocation.allocation_id
-.\.venv\Scripts\python.exe -m app.allocation_cli --test history 1
+$allocation = & $projectPython -m app.allocation_cli --test allocate 001 | ConvertFrom-Json
+& $projectPython -m app.allocation_cli --test complete $allocation.allocation_id
+& $projectPython -m app.allocation_cli --test history 1
 ```
 
 완료 시 모든 GPU를 반환하고 과거 연결 행을 보존합니다. 같은 Job의 재배정 요청은 기존 결과를 반환하며 새 실행을 만들지 않습니다.
@@ -192,13 +203,13 @@ JSON 필드·종료 코드는 [앱 안내](app/README.md), DB별 적용 정책�
 현재는 003이 적용된 테스트 DB에서 `--test`를 명시합니다.
 
 ```powershell
-$result = .\.venv\Scripts\python.exe -m app.proposal_cli --test generate 003 | ConvertFrom-Json
-.\.venv\Scripts\python.exe -m app.proposal_cli --test list 003
-.\.venv\Scripts\python.exe -m app.proposal_cli --test show $result.proposals[0].proposal_id
+$result = & $projectPython -m app.proposal_cli --test generate 003 | ConvertFrom-Json
+& $projectPython -m app.proposal_cli --test list 003
+& $projectPython -m app.proposal_cli --test show $result.proposals[0].proposal_id
 # seed Job 003의 고객 ID는 2. 이 입력은 실제 인증이 아님
-.\.venv\Scripts\python.exe -m app.proposal_cli --test accept 003 $result.proposals[0].proposal_id 2
-.\.venv\Scripts\python.exe -m app.proposal_cli --test reject 003 $result.proposals[1].proposal_id 2
-.\.venv\Scripts\python.exe -m app.proposal_cli --test history 003
+& $projectPython -m app.proposal_cli --test accept 003 $result.proposals[0].proposal_id 2
+& $projectPython -m app.proposal_cli --test reject 003 $result.proposals[1].proposal_id 2
+& $projectPython -m app.proposal_cli --test history 003
 ```
 
 seed Job 003에는 H100 4개 분산 허용 / H100 3개 동일 서버 대안을, Job 005에는 A100 2개 분산 허용 대안을 확인했습니다. 원본 조건을 이미 만족하면 대안을 만들지 않으며 가용 GPU가 0개이면 수량 축소도 생성하지 않습니다.
@@ -211,9 +222,12 @@ seed Job 003에는 H100 4개 분산 허용 / H100 3개 동일 서버 대안을, 
 Python 3.11 이상을 기준으로 개발합니다. 아래는 Windows PowerShell 예시입니다.
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-Copy-Item .env.example .env
+# 각 컴퓨터의 프로젝트 전용 venv가 이미 준비됐다면 재생성하지 않습니다.
+& $projectPython -m pip install -r requirements.txt
+& $projectPython -m pip check
+
+# .env가 없는 신규 환경에서만 예제 파일을 복사합니다.
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
 `.env`는 로컬에서만 값을 채우고 커밋하지 않습니다. 예시 파일에는 실제 접속 정보나 비밀값을 넣지 않습니다.
@@ -221,10 +235,10 @@ Copy-Item .env.example .env
 
 ```powershell
 # Read-only connection check (requires configured MYSQL_* variables)
-.\.venv\Scripts\python.exe -m app.db
+& $projectPython -m app.db
 
 # Local tests; live MySQL tests are explicitly skipped by default
-.\.venv\Scripts\python.exe -m pytest -q
+& $projectPython -m pytest -q
 ```
 
 MySQL 8.0.16 이상이 필요하며, 이번 재검증 환경은 Windows 11 / Python 3.14.6 / MySQL 8.0.46입니다. `requirements.txt`의 네 패키지 버전과 설치 버전이 일치하고 `pip check`가 통과했습니다. 지원 대상으로 둔 다른 Python 버전은 아직 실행 검증하지 않았습니다.
@@ -238,16 +252,17 @@ Python 확장(`ms-python.python`), Pylance, Python Environments가 설치되어 
 
 ```json
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
   "python.testing.pytestEnabled": true,
   "python.testing.unittestEnabled": false,
   "python.testing.pytestArgs": ["tests"]
 }
 ```
 
-기존에 선택한 인터프리터는 이 기본 경로 설정만으로 바뀌지 않을 수 있습니다. `Ctrl+Shift+P` → `Python: Select Interpreter` → `Enter interpreter path...` → `Find...`에서 프로젝트의 `.venv\Scripts\python.exe`를 선택합니다. Python 파일을 열어 상태 표시줄의 환경도 확인합니다. 자세한 동작은 [VS Code 공식 설정 문서](https://code.visualstudio.com/docs/python/settings-reference)를 따릅니다.
+Python 인터프리터 경로는 기기마다 다르므로 공통 `python.defaultInterpreterPath`를 강제로 설정하지 않습니다. VS Code의 `Python: Select Interpreter`에서 이 기기의 `%LOCALAPPDATA%\\venvs\\AIDC-Workload-Matcher-<laptop|desktop>\\Scripts\\python.exe`를 선택합니다.
 
-Windows PowerShell의 유효 실행 정책 `Restricted`가 `Documents/WindowsPowerShell/profile.ps1` 로드를 막는 PSSecurityException / UnauthorizedAccess를 재현했습니다. 같은 터미널에서 위 Python 직접 호출은 성공합니다. `(.venv)` 표시는 편집기의 인터프리터 선택을 보장하지 않습니다.
+VS Code에서 `Ctrl+Shift+P` → `Python: Select Interpreter` → `Enter Interpreter Path...`로 해당 기기의 전용 venv 실행 파일을 지정합니다. Python 파일을 열어 상태 표시줄의 환경을 확인합니다. 자세한 동작은 [VS Code 공식 설정 문서](https://code.visualstudio.com/docs/python/settings-reference)를 참고합니다.
+
+Windows PowerShell의 유효 실행 정책 `Restricted`가 `Documents/WindowsPowerShell/profile.ps1` 로드를 막는 PSSecurityException / UnauthorizedAccess를 재현했습니다. 같은 터미널에서 위 Python 직접 호출은 성공합니다. `(base)` 같은 터미널 표시도 편집기의 인터프리터 선택을 보장하지 않습니다.
 가상환경 활성화 스크립트 없이 위 명령을 실행할 수 있으므로 실행 정책·사용자 프로필·ACL·사용자 전체 VS Code 설정은 변경하지 않았습니다. 새 PowerShell 세션에는 프로필 오류가 계속 표시될 수 있습니다.
 
 ## 개발 방향

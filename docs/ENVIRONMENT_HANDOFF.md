@@ -8,13 +8,13 @@
 
 ## 절차 (기본은 읽기 전용)
 
-1. **기기·경로** — 노트북/데스크톱, 실제 저장소, OneDrive 동기화 완료 여부, 다른 프로젝트와 혼동 없는지 확인한다.
-2. **Git** — 현재 branch, HEAD, origin/main, 미커밋 변경·충돌 파일·잠금을 확인한다. 동기화 중 Git 파일을 동시에 쓰지 않는다. Pull은 안전하고 필요한 경우에만. 강제 Reset/Rebase/Push 금지.
-3. **Python** — 이 기기에 설치된 Python, 전용 venv 절대 경로, pip check, 버전과 requirements 호환을 확인한다. 공유 OneDrive .venv가 다른 기기 경로를 가리키면 자동 삭제/재생성하지 않는다.
+1. **기기·경로** — 노트북/데스크톱, **OneDrive 밖 `%USERPROFILE%\Desktop\AIDC-Workload-Matcher`**가 실제 저장소인지 확인한다. 기존 OneDrive 복사본을 실수로 열지 않는다. 경로가 이동했다면 기기별 실제 경로를 다시 보고한다.
+2. **Git** — 현재 branch, HEAD, origin/main, 미커밋 변경·충돌 파일·잠금을 확인한다. HEAD가 같고 작업 트리가 깨끗하면 다시 Pull하지 않는다. 안전한 Fast-forward가 필요한 경우에만 Pull하며 강제 Reset/Rebase/Push 금지.
+3. **Python** — 노트북 `%LOCALAPPDATA%\venvs\AIDC-Workload-Matcher-laptop\Scripts\python.exe`, 데스크톱 `%LOCALAPPDATA%\venvs\AIDC-Workload-Matcher-desktop\Scripts\python.exe`를 우선 확인한다. 모두 OneDrive 밖의 기기별 환경이다. 직접 절대 경로로 실행하고 버전·`pip check`·requirements 호환을 확인한다. 일반 `python`은 Anaconda `(base)`일 수 있다. 옛 OneDrive `.venv`는 사용·삭제·수정하지 않는다.
 4. **MySQL 대상** — MYSQL_*와 TEST_MYSQL_*의 실제 SELECT DATABASE(), localhost 여부, 버전·스키마 버전·테이블/트리거·PK/FK/UNIQUE/CHECK·인덱스·정의 지문·현재 seed 값/행 수·필요 권한을 읽기 전용으로 검사한다. 비밀번호·개인 계정명은 출력하지 않는다.
 5. **비교** — 아래 마지막 검증 기록과 현재 기기 실측을 비교하고, '현재 실측/다른 기기 과거 기록/미확인'을 구분한다. 다른 기기 DB에 현재 접속하지 않았다면 두 컴퓨터가 완전히 같은 상태라고 단정하지 않는다.
 6. **차이 해소** — 필요한 마이그레이션·가상환경·설정 변경의 최소 경로를 먼저 제시한다. 어떤 컴퓨터의 어떤 DB에 무엇을 실행할지와 기존 데이터 보존·백업/복원 검증을 제시하고, 그 **구체적인 작업만 승인**받아 수행한다. 이 기기의 승인은 다른 기기에 자동 적용되지 않는다.
-7. **재검증** — 각 DB의 기존 행·논리 정의·트리거 보존, 신규 테이블/제약, 읽기 조회, 승인된 테스트를 확인한다. MySQL을 변경하는 테스트도 DB 쓰기이므로 승인 범위에 포함시킨다.
+7. **재검증** — 각 DB의 기존 행·논리 정의·트리거 보존, 신규 테이블/제약, 읽기 조회, 승인된 테스트를 확인한다. MySQL을 변경하는 테스트도 DB 쓰기이므로 승인 범위에 포함시킨다. pytest 9의 `--basetemp`를 저장소 밖으로 지정할 때는 상위 폴더를 먼저 생성한다.
 8. **보고·다음 단계** — 기기별 현재 상태, 차이, 미검증 사항, 성공·실패·복구 필요 여부를 보고하고서야 신규 기능 개발이나 다음 마일스톤으로 넘어간다.
 
 ## DB 변경 안전장치
@@ -24,21 +24,28 @@
 - 개발/테스트 DB의 기준 seed와 원본 보호 트리거는 보존한다. 시연용 영구 Job은 자동 회귀 테스트 DB에 남기지 않는다.
 - 신규 기능마다 코드 커밋과 해당 DB에 적용된 마이그레이션을 **기기별로 별도 확인**한다.
 
-## 마지막 검증 기록 — 2026-11-11 (실시간 상태 아님)
+## 마지막 검증 기록 — 노트북 2026-11-12 / 데스크톱 2026-11-11 (실시간 아님)
 
-| 항목 | 노트북: 마지막 보고 | 데스크톱: 최근 실측 |
+| 항목 | 노트북 — 2026-11-12 직접 실측 | 데스크톱 — 2026-11-11 Codex 작업 결과·사용자 보고 |
 | --- | --- | --- |
-| Git 기준선 | v0.4-2, 상위 문서 이후 현재 HEAD 재확인 필요 | main/origin/main = 39de6f1, 깨끗한 트리 |
-| MySQL | 8.0.46 | 8.0.46 / localhost:3306 |
-| 개발 DB | v0.2-2, 8개 테이블 / 보호 트리거 4개 | v0.2-2, 8개 / 4개 |
-| 테스트 DB | **v0.3-2, 11개 / 4개** | **v0.3-1, 10개 / 4개**, 004 미적용 |
-| 기준 데이터 | 마지막 검증 기록상 기존 seed 보존 | seed.sql 명시값과 일치; 고객 3·모델 2·서버 4·GPU 10·Job/요구조건 각 5 |
-| Python | 마지막 기록상 실행 정상 | Python 3.14.6, 데스크톱 전용 가상환경 정상 |
-| 테스트 | 노트북 마지막 전체 599 / MySQL 217 passed | 데스크톱 비-MySQL 382 passed, 217 미실행 |
+| Git | `main`·`origin/main`·원격 `5fd42aa`, 작업 트리 깨끗함 | 004 작업 후 `5fd42aa`·깨끗한 작업 트리로 보고 |
+| 프로젝트 경로 | `%USERPROFILE%\Desktop\AIDC-Workload-Matcher` (노트북) | `%USERPROFILE%\Desktop\AIDC-Workload-Matcher` (데스크톱, 사용자 이동 확인; 기기에서 재확인 필요) |
+| MySQL | 8.0.46 / `localhost:3306` | 8.0.46 / `localhost:3306` |
+| 개발 DB `aidc_workload_matcher` | v0.2-2 / **8개 테이블·보호 트리거 4개** | v0.2-2 / **8개·4개** |
+| 테스트 DB `aidc_workload_matcher_test` | v0.3-2 / **11개·4개** | v0.3-2 / **11개·4개**, 004 적용·백업·독립 복원 검증 완료로 보고 |
+| 기준 데이터 | 양쪽 DB의 seed 명시값·원본 Job/요구조건 각 5행 일치, 할당·대안 비어 있음 | 기존 seed·원본 보존 및 테스트 후 임시 할당·대안 정리로 보고 |
+| Python | 3.14.6 / 노트북 전용 venv 정상, Flask 3.1.3·Connector 26.10.0·pytest 9.2.0·dotenv 1.2.4 | 3.14.6 / 데스크톱 전용 venv 정상, 동일 고정 직접 의존성 설치 |
+| 테스트 | **2026-11-12 비-MySQL 382 passed**, MySQL 217개는 이날 미실행(과거 전체 599 통과 기록) | **2026-11-11 전체 599 passed**, MySQL 217 포함(보고) |
 
-데스크톱 전용 Python: `C:\Users\hahye\AppData\Local\venvs\AIDC-Workload-Matcher-desktop\Scripts\python.exe`.
+노트북 Python: `%LOCALAPPDATA%\venvs\AIDC-Workload-Matcher-laptop\Scripts\python.exe`.
 
-**승인되었으나 아직 실행 완료가 보고되지 않은 단계:** 데스크톱 테스트 DB `aidc_workload_matcher_test`의 백업·복원 검증 뒤 004 `allocation_bases` 1개 CREATE와 전체 599개 테스트 재검증. 개발 DB 003/004, 노트북 DB 변경, M0 시연 DB 생성·영구 Job 등록은 별도 승인 대상이다.
+데스크톱 Python: `%LOCALAPPDATA%\venvs\AIDC-Workload-Matcher-desktop\Scripts\python.exe`.
+
+**노트북 2026-11-12 확인:** 새 바탕화면 저장소에 `.env`를 복사했고 VS Code에서 노트북 전용 venv 선택 완료. Flask 읽기 전용 GET·매칭 조회·원본 데이터 지문 비교 정상. 노트북 Git 사용자 설정에서 `credential.helper=manager-core` 경고가 보고됐으며 GitHub 원격 조회는 성공; CLI Push 인증에 문제가 생기면 별도 진단한다. 비밀값은 기록하지 않는다.
+
+**완료된 단계:** 데스크톱 테스트 DB에 004 `allocation_bases` 추가, 기존 정의·행·트리거 보존, 백업·격리 복원, 전체 599개 테스트 통과(2026-11-11 보고). 노트북 2026-11-12 읽기 전용 동등성 검사 통과.
+
+**다음 미승인 작업:** 양쪽 개발 DB(현재 각각 8개)에 003·004 적용 또는 전용 M0 시연 DB 별도 생성/초기화. 모든 DDL·영구 COMMIT은 **기기·대상·범위별 사전 승인**이 필요하다. 두 컴퓨터의 현재 DB 파일/데이터가 실시간으로 동기화되는 것은 아니다.
 
 ## 시작 루틴 결과 보고 양식
 

@@ -10,7 +10,7 @@
 - [AGENTS.md](AGENTS.md) · [CLAUDE.md](CLAUDE.md): 에이전트 작업·독립 리뷰 지침.
 - [기기 전환 시작 루틴](docs/ENVIRONMENT_HANDOFF.md): 노트북·데스크톱에서 Git·Python·DB 진행 수준을 먼저 대조하는 절차.
 
-**현재 구현은 GPU 중심 v0.4-2입니다.** GPU·CPU·RAM을 위한 추가 3개 테이블은 아직 제안으로, 문서 반영이 DB 변경 허가는 아닙니다. 2026-11-11 확인 기준 개발 DB는 양쪽 8개, 테스트 DB는 노트북 11개·데스크톱 10개로 다르며, 현재 상태는 기기 전환 때 재검증해야 합니다.
+**현재 구현은 GPU 중심 v0.4-2입니다.** GPU·CPU·RAM을 위한 추가 3개 테이블은 아직 제안으로, 문서 반영이 DB 변경 허가는 아닙니다. **노트북 2026-11-12 실측/데스크톱 2026-11-11 보고 기준** 두 컴퓨터의 개발 DB는 각각 8개, 테스트 DB는 각각 11개입니다. 기기별 Git·Python·MySQL 최신 상태는 [환경 전환 시작 루틴](docs/ENVIRONMENT_HANDOFF.md)으로 재확인합니다.
 
 ## 프로젝트 목적
 
@@ -36,8 +36,10 @@ Flask·Jinja2 한국어 화면에서 고객 선택, 자원·Job 조회, 등록 �
 **웹 쓰기는 기본 차단**이며 현재 8개 테이블의 개발 DB는 읽기 전용으로 사용합니다.
 
 ```powershell
+# VS Code에서 열어둔 프로젝트 폴더에서 실행 (노트북·데스크톱 각각의 전용 venv)
 $env:WEB_ENABLE_WRITES = '0'
-.\.venv\Scripts\python.exe -B -m app.web
+$venvName = 'AIDC-Workload-Matcher-laptop'  # 데스크톱에서는 -desktop
+& "$env:LOCALAPPDATA\venvs\$venvName\Scripts\python.exe" -B -m app.web
 ```
 
 접속 주소: **http://127.0.0.1:5000/**. Debug·자동 초기화·자동 마이그레이션은 사용하지 않습니다.

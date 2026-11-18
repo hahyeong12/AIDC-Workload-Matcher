@@ -10,7 +10,7 @@
 - [AGENTS.md](AGENTS.md) · [CLAUDE.md](CLAUDE.md): 에이전트 작업·독립 리뷰 지침.
 - [기기 전환 시작 루틴](docs/ENVIRONMENT_HANDOFF.md): 노트북·데스크톱에서 Git·Python·DB 진행 수준을 먼저 대조하는 절차.
 
-**현재 구현은 GPU 중심 v0.4-2입니다.** GPU·CPU·RAM을 위한 추가 3개 테이블은 아직 제안으로, 문서 반영이 DB 변경 허가는 아닙니다. **노트북 2026-11-12 실측/데스크톱 2026-11-11 보고 기준** 두 컴퓨터의 개발 DB는 각각 8개, 테스트 DB는 각각 11개입니다. 기기별 Git·Python·MySQL 최신 상태는 [환경 전환 시작 루틴](docs/ENVIRONMENT_HANDOFF.md)으로 재확인합니다.
+**현재 구현은 GPU 중심 v0.4-2입니다.** GPU·CPU·RAM을 위한 추가 3개 테이블은 아직 제안으로, 문서 반영이 DB 변경 허가는 아닙니다. 노트북 시연 DB는 M0-A 구성·seed 입력을 완료했으며, 백업 복원 검증과 M0-B 영구 COMMIT 시연은 남아 있습니다. 기기별 검증 날짜와 Git·Python·MySQL 상태는 [환경 전환 시작 루틴](docs/ENVIRONMENT_HANDOFF.md)에 모아 기록합니다.
 
 ### 현재 노트북·데스크톱 Python 실행 경로
 

@@ -9,6 +9,7 @@
 - [요구사항](docs/requirements.md) · [아키텍처](docs/architecture.md) · [설계 결정](docs/decisions.md) · [실제 ERD](database/erd.md): 현행 구현의 상세 정본.
 - [AGENTS.md](AGENTS.md) · [CLAUDE.md](CLAUDE.md): 에이전트 작업·독립 리뷰 지침.
 - [기기 전환 시작 루틴](docs/ENVIRONMENT_HANDOFF.md): 노트북·데스크톱에서 Git·Python·DB 진행 수준을 먼저 대조하는 절차.
+- [M0-B 시연 검증 계획](docs/m0-validation.md): 백업 복원 검증 이후 별도 승인할 영구 COMMIT·독립 연결 조회 절차(실행 전).
 
 **현재 구현은 GPU 중심 v0.4-2입니다.** GPU·CPU·RAM을 위한 추가 3개 테이블은 아직 제안으로, 문서 반영이 DB 변경 허가는 아닙니다. 노트북 시연 DB는 M0-A 구성·seed 입력을 완료했으며, 백업 복원 검증과 M0-B 영구 COMMIT 시연은 남아 있습니다. 기기별 검증 날짜와 Git·Python·MySQL 상태는 [환경 전환 시작 루틴](docs/ENVIRONMENT_HANDOFF.md)에 모아 기록합니다.
 

@@ -171,7 +171,7 @@ AllocationService: 기존 원본 배정 경로 유지, ProposalService가 호출
 
 ## v0.3-2 배정 근거와 실행
 
-AllocationService.allocate_proposal(job_id, proposal_id, customer_id)는 기존 allocation_transaction, locked_context, 가용성 평가·GPU 선택·저장 함수를 재사용한다. 공통 잠금 순서는 모델 → Job → 원본 요구조건 → 서버 → GPU → Proposal → 응답 → 할당 → 할당-GPU → 배정 근거다. 종류별 ID는 오름차순이다. Proposal/응답 서비스도 모델·Job을 먼저 잠그므로 같은 모델의 지원 쓰기는 직렬화된다. 완료는 최초 할당을 잠금 없이 읽어 Job을 식별하고 같은 순서로 잠근 뒤 관계를 다시 읽는다.
+AllocationService.allocate_proposal(job_id, proposal_id, customer_id)는 기존 allocation_transaction, locked_context, 가용성 평가·GPU 선택·저장 함수를 재사용한다. 공통 잠금 순서는 모델 → Job → 원본 요구조건 → 서버 → GPU → Proposal → 응답 → 할당 → 할당-GPU → 배정 근거다. 종류별 ID는 오름차순이다. Proposal/응답 서비스도 모델·Job을 먼저 잠그므로 같은 모델의 지원 쓰기는 직렬화된다. 대안 생성과 새 수락 직전의 배정 이력 확인(F1)은 이 잠금을 보유한 비잠금 읽기이므로 순서에 새 단계를 추가하지 않는다. 완료는 최초 할당을 잠금 없이 읽어 Job을 식별하고 같은 순서로 잠근 뒤 관계를 다시 읽는다.
 
 서비스는 대안의 Job·고객, 원본 소유자, 응답의 Proposal·Job·고객·ACCEPTED 및 허용된 조건 변화를 재검증한다. 원본의 불변 객체를 replace하여 적용 조건을 만들고 원본 DB 행은 UPDATE하지 않는다. 현재 재고를 잠근 상태에서 전체 수량을 선택하고 allocations/allocation_gpus와 allocation_bases를 한 트랜잭션으로 저장한다.
 

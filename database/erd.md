@@ -277,7 +277,7 @@ Generated Column은 부모 상태를 참조할 수 없으므로 헤더·자식 �
 | responded_at | TIMESTAMP(6) | UTC 최초 확정 응답 시각 |
 | accepted_job_request_id | BIGINT UNSIGNED, Generated STORED | ACCEPTED이면 Job ID, 아니면 NULL; UNIQUE |
 
-제안별 응답 키 `(proposal_id, job_request_id, customer_id)`의 UNIQUE와 동일 튜플 복합 FK를 함께 사용한다. proposal_id 하나에 가능한 부모 튜플이 하나이므로 제안당 확정 응답도 최대 하나다. 다른 Job·고객을 붙인 응답은 FK로 거부한다. 수락 Job의 UNIQUE는 다른 제안에 대한 이중 수락을 거부하며 거절은 여러 제안에 보존할 수 있다.
+제안별 응답 키 `(proposal_id, job_request_id, customer_id)`의 UNIQUE와 동일 튜플 복합 FK를 함께 사용한다. proposal_id 하나에 가능한 부모 튜플이 하나이므로 제안당 확정 응답도 최대 하나다. 다른 Job·고객을 붙인 응답은 FK로 거부한다. 수락 Job의 UNIQUE는 다른 제안에 대한 이중 수락을 거부하며 거절은 여러 제안에 보존할 수 있다. 이 UNIQUE에는 철회 개념이 없으므로 Job당 수락은 영구히 한 번이다. 할당 이력이 있는 Job의 새 수락 거부는 서비스 정책이며 DB 제약이 아니다([F1 검증 기록](../docs/f1-allocation-history-validation.md)).
 Job별 응답 조회 인덱스 `(job_request_id, response_id)`와 고객 FK 인덱스를 둔다. 다른 종료 의사로 바꾸는 API는 없고 동일 응답은 ID·시각을 보존해 재응답한다.
 
 신규 테이블의 불변성은 서비스의 추가·조회 전용 인터페이스와 충돌 정책이다. DB의 일반 UPDATE/DELETE까지 새 트리거로 금지한 것은 아니며 운영 권한 제한이 필요하다. 테스트가 생성한 정확한 임시 ID의 정리 외에 서비스는 이력을 삭제하지 않는다.

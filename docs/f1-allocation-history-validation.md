@@ -71,7 +71,30 @@
 | --- | --- | --- |
 | 비-MySQL 전체 | `python -B -m pytest -q -m "not mysql" -p no:cacheprovider --basetemp <저장소 밖 새 경로>` | **392 passed, 226 deselected** (기존 382 + 신규 10) |
 | 수집 | 같은 옵션 + `--collect-only` | 618 collected (MySQL 226 = 기존 217 + 신규 9) |
-| MySQL 통합 | 테스트 DB 대상, 별도 승인 후 실행 | **미실행 — 승인 대기** |
+| 기능 커밋 단독 | `48fc723`을 임시 worktree에서 비-MySQL 실행 | 382 passed (기존 테스트 회귀 없음) |
+| 전체 + MySQL (1차) | `python -B -m pytest -q -rfEs -p no:cacheprovider --basetemp <저장소 밖 새 경로> --run-mysql` | **617 passed, 1 failed, 0 skipped** / 57.4초. MySQL 226개 중 225 passed |
+| 실패 1건 재실행 | 같은 테스트 1개, `--basetemp` 미지정(프로젝트 기본 `.pytest-tmp/`) | **1 passed** |
+
+## 4-1. MySQL 통합 실행 기록 (2026-11-18, 사용자 승인 범위)
+
+- 실행기: `%LOCALAPPDATA%\venvs\AIDC-Workload-Matcher-laptop\Scripts\python.exe` (Python 3.14.6), `PYTHONDONTWRITEBYTECODE=1`.
+- 쓰기 대상: `TEST_MYSQL_*` → localhost `aidc_workload_matcher_test` 하나. 개발 DB는 기존 읽기 전용 웹 테스트 1건만 접속했다. 시연 DB에는 테스트가 접속하지 않았다(아래 감사만 읽기 전용 접속).
+- 시작 전: Git 작업 트리 깨끗함(`b585b58`). 테스트 DB는 seed만 있고 할당·제안·응답·근거 0행. 세 DB 기준선이 직전 측정과 일치했다.
+- **실패 1건 분석**: `test_mysql_proposal_concurrency.py::test_real_cli_generation_details_acceptance_rejection_and_history`. DB 관련 단언(실제 CLI 생성·수락·거절, 원본·할당 지문 불변)을 모두 통과한 뒤 마지막 증거 JSON을 상대 경로 `.pytest-tmp/`에 쓰다가 `FileNotFoundError`가 났다. `.pytest-tmp`는 `--basetemp`를 지정하지 않을 때만 conftest가 만들기 때문이며, 저장소에 파일을 남기지 않으려고 저장소 밖 basetemp를 지정한 실행 방식에서 드러난 **기존 테스트의 숨은 경로 의존**이다. F1과 무관하고, 픽스처 정리는 정상 수행됐다. 같은 테스트를 기본 방식으로 다시 실행해 통과했다. 테스트 코드는 이번 범위에서 수정하지 않았다.
+- F1 동시성 테스트(`test_acceptance_waiting_behind_original_allocation_is_refused_after_commit`, 0.85초): 실제 두 연결에서 `allocate(2)`가 모델·Job 잠금을 보유한 동안 `respond(2, ACCEPTED)`가 잠금 획득을 시도하고 **0.2초 동안 획득하지 못함(대기)**을 확인했다. 배정 커밋 뒤 잠금을 얻은 `respond`는 `ProposalConflict("…배정 이력…")`로 거부됐고, `proposal_responses` 0행, Job 2 할당 1행이었다. 커밋된 할당 2건(Job 1·2)과 제안 1건은 정확한 ID로 정리됐다.
+
+### 세 DB 전후 비교 (읽기 전용 감사: 행 수·데이터·스키마·트리거 지문)
+
+| DB | 데이터 | 스키마 | 보호 트리거 4개 | AUTO_INCREMENT |
+| --- | --- | --- | --- | --- |
+| 테스트 `aidc_workload_matcher_test` | 동일 | 동일 | 동일 | 증가(아래) |
+| 개발 `aidc_workload_matcher` | 동일 | 동일 | 동일 | 변화 없음 |
+| 시연 `aidc_workload_matcher_demo` | 동일 | 동일 | 동일 | 변화 없음 |
+
+테스트 DB AUTO_INCREMENT(다음 값, 실행 전 → 1차 실행 + 재실행 후): allocations 540 → 623 (+83), customers 1164 → 1332 (+168),
+gpu_models 1172 → 1341 (+169), gpus 2672 → 3053 (+381), job_proposals 983 → 1113 (+130, 재실행 +3 포함),
+job_requests 1566 → 1806 (+240), proposal_responses 461 → 527 (+66, 재실행 +3 포함), servers 1522 → 1741 (+219).
+InnoDB는 롤백·삭제된 행의 번호를 회수하지 않으므로 생기는 **번호 소비이며 행 데이터 변화가 아니다**. 모든 테이블의 행 수와 데이터 지문은 실행 전과 같다.
 
 ## 5. 정책 문서화 (F2: Job당 수락 1회)
 
@@ -85,6 +108,9 @@
 같은 Job 안에서 다른 대안을 다시 수락하는 "재협의"는 지원하지 않는다. 이를 지원하려면 수락 철회 이력과 UNIQUE 의미를 바꾸는
 스키마 변경이 필요하며 이번 범위가 아니다.
 
-## 6. 범위 밖
+## 6. 범위 밖과 남은 문제
 
-F3(배정 근거 복합 FK), F4(시각 타입), F5(계정 권한 분리), M0-B, 개발·시연 DB 변경은 포함하지 않았다.
+- F3(배정 근거 복합 FK), F4(시각 타입), F5(계정 권한 분리), M0-B, 개발·시연 DB 변경은 포함하지 않았다.
+- 배정 이력 검사는 서비스 규칙이다. 직접 SQL로 `proposal_responses`에 INSERT하는 경로는 DB가 막지 않는다(F5 권한 분리와 연관).
+- 위 CLI 테스트의 `.pytest-tmp/` 상대 경로 의존은 별도 수정 후보다(예: `tmp_path` 사용). 이번 커밋에서는 바꾸지 않았다.
+- 웹 화면 버튼 비활성화는 조회 시점의 표시다. 실제 거부는 서비스가 잠금 안에서 다시 판단한다.

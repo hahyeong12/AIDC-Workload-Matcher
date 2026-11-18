@@ -38,7 +38,7 @@
 | 시연 DB `aidc_workload_matcher_demo` | v0.3-2 / **11개·4개**, M0-A 구성·seed 입력 완료 | 구성 미확인 |
 | 기준 데이터 | 세 DB 모두 seed 명시값 일치: 고객 3·모델 2·서버 4·GPU 10·원본 Job/요구조건 각 5. 할당·GPU 점유 및 존재하는 대안·응답·근거 테이블은 0행 | 기존 seed·원본 보존 및 테스트 후 임시 할당·대안 정리로 보고 |
 | Python | 3.14.6 / 노트북 전용 venv 정상, Flask 3.1.3·Connector 26.10.0·pytest 9.2.0·dotenv 1.2.4 | 3.14.6 / 데스크톱 전용 venv 정상, 동일 고정 직접 의존성 설치 |
-| 테스트 | **비-MySQL 382 passed, 217 deselected / 4.89초**. MySQL 통합 217개는 오늘 미실행. 전체 599 통과는 과거 기록 | **2026-11-11 전체 599 passed**, MySQL 217 포함(보고) |
+| 테스트 | 시작 점검: 비-MySQL 382 passed, 217 deselected. **F1 브랜치(`fix/f1-no-proposals-after-allocation`) 승인 실행: 전체 618개 중 617 passed·1 failed·0 skipped, 실패 1건(증거 파일 상대 경로 의존, DB 단언은 통과)은 기본 방식 재실행에서 passed. MySQL 226개 포함.** 실행 후 세 DB 데이터·스키마·트리거 지문 불변, 테스트 DB AUTO_INCREMENT만 증가([F1 검증 기록](f1-allocation-history-validation.md)) | **2026-11-11 전체 599 passed**, MySQL 217 포함(보고) |
 | 시연 백업·M0 진행 | 백업·manifest 존재, 크기·SHA-256 일치. 실제 복원 검증 미실시, M0-B 영구 COMMIT 시연 미완료 | 시연 DB·시연 백업 미확인(테스트 DB 복원 보고와 구분) |
 
 노트북 Python: `%LOCALAPPDATA%\venvs\AIDC-Workload-Matcher-laptop\Scripts\python.exe`.

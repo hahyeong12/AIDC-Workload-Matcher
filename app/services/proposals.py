@@ -76,11 +76,27 @@ class ProposalService:
             raise ProposalConflict("원본 요구조건이 변경되어 중단했습니다.")
         return requirement, self.repository.owner(job_id)
 
+    def require_no_allocation_history(self, job_id, action):
+        """One execution per Job: any ACTIVE/COMPLETED/FAILED allocation settles it.
+
+        Called only while the model -> Job locks are held. Every allocation writer
+        (AllocationService.allocate/allocate_proposal) takes the same locks first,
+        so an allocation committed while we waited is visible to this READ
+        COMMITTED read, and none can be inserted for this Job until this
+        transaction ends. The read takes no allocation lock, so the documented
+        global lock order is unchanged.
+        """
+        if self.repository.has_allocation_history(job_id):
+            raise ProposalConflict(
+                f"이 Job에는 배정 이력이 있어 {action}할 수 없습니다. 원본 Job은 한 번만 실행되며, "
+                "다른 조건이 필요하면 새 Job을 등록하세요. 기존 대안의 거절 기록은 남길 수 있습니다.")
+
     def generate(self, job_id):
         job_id = parse_job_id(job_id)
         with allocation_transaction(self.connection):
             requirement, owner = self.locked_job(job_id)
             inventory = self.repository.lock_inventory(requirement.gpu_model_id)
+            self.require_no_allocation_history(job_id, "새 대안을 생성")
             availability = evaluate_availability(
                 requirement, inventory, self.repository.occupied_gpu_ids(requirement.gpu_model_id))
             drafts = generate_drafts(availability)
@@ -123,6 +139,10 @@ class ProposalService:
             else:
                 if decision == "ACCEPTED" and self.repository.accepted_for_job(job_id, lock=True) is not None:
                     raise ProposalConflict("이 Job에는 이미 수락된 다른 대안이 있습니다.")
+                # Only NEW acceptances are refused; the replay branch above and
+                # REJECTED responses stay available after execution.
+                if decision == "ACCEPTED":
+                    self.require_no_allocation_history(job_id, "새로 수락")
                 # Acceptance records intent only: deliberately no availability check
                 # or AllocationService call. Stale proposals remain historical facts.
                 result = self.repository.create_response(proposal, customer_id, decision)

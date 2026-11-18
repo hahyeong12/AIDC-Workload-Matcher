@@ -89,6 +89,8 @@ def service():
     repo.get_proposal.return_value = record
     repo.response_for.return_value = None
     repo.accepted_for_job.return_value = None
+    # Default: the Job has no allocation history (MagicMock would otherwise be truthy).
+    repo.has_allocation_history.return_value = False
     repo.create_response.return_value = CustomerResponse(9, 7, 1, 1, "ACCEPTED", datetime(2026, 11, 8))
     return service
 

@@ -63,6 +63,12 @@ class AllocationRepository(HardwareRepository):
                           "ORDER BY allocation_id DESC LIMIT 1 FOR UPDATE", (job_id,))
         return rows[0][0] if rows else None
 
+    def has_allocation_history(self, job_id):
+        # Deliberately a non-locking read: callers hold the model -> Job locks
+        # that every allocation writer takes first, so under READ COMMITTED this
+        # sees any committed allocation without adding a new lock-order step.
+        return bool(self.query("SELECT 1 FROM allocations WHERE job_request_id = %s LIMIT 1", (job_id,)))
+
     def get_allocation(self, allocation_id, *, lock=False, replayed=False):
         suffix = " FOR UPDATE" if lock else ""
         rows = self.query("SELECT allocation_id, job_request_id, status, allocated_at, ended_at "

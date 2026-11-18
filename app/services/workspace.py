@@ -63,7 +63,9 @@ class WorkspaceService:
         detail = self.proposals.detail(proposal_id)
         if detail.proposal.job_request_id != job.job_request_id:
             raise ProposalConflict("해당 대안이 이 Job에 속하지 않습니다.")
-        return dict(job=job, detail=detail)
+        # Display hint only; ProposalService re-checks under locks before any write.
+        executed = self.allocations.repository.has_allocation_history(job.job_request_id)
+        return dict(job=job, detail=detail, executed=executed)
 
     def owned_allocation(self, job_id, allocation_id, customer_id):
         self.owned_job(job_id, customer_id)

@@ -295,3 +295,23 @@ def test_live_development_web_is_readonly_without_schema_changes():
         cn.start_transaction(readonly=True)
         assert snapshot(cn, "v0.2-2") == before
         cn.rollback()
+
+
+def test_job_with_allocation_history_refuses_new_alternatives_and_acceptance(browser):
+    # F1: Job short of GPUs gets a reduced proposal, then the original runs.
+    sample, db = browser["sample"], browser["db"]
+    job, _ = register(browser, count=2)
+    assert post(browser, f"/jobs/{job}/actions/generate").status_code == 303
+    proposal = proposals(browser, job)[0][0]
+    execute(db, "INSERT INTO gpus(asset_tag,gpu_model_id,server_id) VALUES (%s,%s,%s)",
+            (sample["token"] + "late", sample["model"], sample["server"]))
+    assert post(browser, f"/jobs/{job}/actions/allocate").status_code == 303
+    before = snapshot(db, "v0.3-2")
+    assert post(browser, f"/jobs/{job}/actions/generate").status_code == 409
+    accepted = post(browser, f"/jobs/{job}/actions/accept", proposal_id=str(proposal))
+    assert accepted.status_code == 409 and "배정 이력" in accepted.get_data(as_text=True)
+    assert snapshot(db, "v0.3-2") == before
+    page = browser["client"].get(f"/jobs/{job}/proposals/{proposal}?customer_id={sample['customer']}")
+    assert page.status_code == 200 and "배정 이력이 있는 Job" in page.get_data(as_text=True)
+    assert post(browser, f"/jobs/{job}/actions/reject", proposal_id=str(proposal)).status_code == 303
+    assert execute(db, "SELECT decision FROM proposal_responses WHERE job_request_id=%s", (job,)) == [("REJECTED",)]

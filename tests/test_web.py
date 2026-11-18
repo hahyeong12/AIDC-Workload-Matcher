@@ -1,13 +1,14 @@
 """Flask adapter tests: service calls, policy gates, rendering and cleanup."""
 
 from dataclasses import replace
+import re
 from datetime import datetime
 from unittest.mock import Mock
 
 import pytest
 
 from app import create_app, web
-from app.allocation import AllocationConflict, InsufficientResources
+from app.allocation import AllocationConflict, AllocationGPU, AllocationResult, InsufficientResources
 from app.db import DatabaseConfigError, DatabaseOperationError
 from app.job import JobDetail
 from app.matching import JobRequirement
@@ -47,7 +48,8 @@ def ui(monkeypatch):
                         reason_codes=("AVAILABLE_QUANTITY_SHORTAGE",), explanation="자원 부족")
     hardware = Mock(status="HARDWARE_INSUFFICIENT", requirement=REQUIREMENT)
     view.detail.return_value = dict(job=JOB, hardware=hardware, availability=availability, proposals=(), history=())
-    view.proposal.return_value = dict(job=JOB, detail=ProposalDetail(PROPOSAL, REQUIREMENT, None))
+    view.proposal.return_value = dict(job=JOB, detail=ProposalDetail(PROPOSAL, REQUIREMENT, None),
+                                     executed=False)
     monkeypatch.setattr(web, "WorkspaceService", Mock(return_value=view))
     jobs = Mock()
     jobs.register.return_value = 77
@@ -297,3 +299,30 @@ def test_failed_registration_ticket_cannot_be_automatically_retried(ui):
     assert post(ui, "/jobs", ticket=ticket).status_code == 503
     assert post(ui, "/jobs", ticket=ticket).status_code == 409
     assert ui["jobs"].register.call_count == 1
+
+
+def button(html, action):
+    """The submit button of the action form, e.g. '<button class="button" disabled ...>'."""
+    return re.search(rf'action="/jobs/7/actions/{action}".*?(<button[^>]*>)', html, re.S)[1]
+
+
+@pytest.mark.parametrize("status", ["ACTIVE", "COMPLETED", "FAILED"])
+def test_generate_button_is_disabled_once_job_has_allocation_history(ui, status):
+    page = ui["client"].get("/jobs/7?customer_id=1").get_data(as_text=True)
+    assert "disabled" not in button(page, "generate")       # short of resources, no history
+    ended = None if status == "ACTIVE" else NOW
+    allocation = AllocationResult(11, 7, status, NOW, ended, (AllocationGPU(1, 1, NOW, ended),))
+    ui["view"].detail.return_value["history"] = (allocation,)
+    page = ui["client"].get("/jobs/7?customer_id=1").get_data(as_text=True)
+    assert "disabled" in button(page, "generate")
+    assert "배정 이력이 있는 Job" in page
+
+
+def test_accept_button_is_disabled_but_reject_allowed_once_job_has_allocation_history(ui):
+    page = ui["client"].get("/jobs/7/proposals/9?customer_id=1").get_data(as_text=True)
+    assert "disabled" not in button(page, "accept") and "disabled" not in button(page, "reject")
+    ui["view"].proposal.return_value["executed"] = True
+    page = ui["client"].get("/jobs/7/proposals/9?customer_id=1").get_data(as_text=True)
+    assert "disabled" in button(page, "accept")
+    assert "disabled" not in button(page, "reject")
+    assert "배정 이력이 있는 Job" in page

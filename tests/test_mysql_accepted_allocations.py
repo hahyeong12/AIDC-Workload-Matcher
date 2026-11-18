@@ -7,6 +7,7 @@ import pytest
 
 from allocation_helpers import RollbackEnvelope, execute
 from app.allocation import AllocationConflict, AllocationIntegrityError, InsufficientResources
+from app.proposal import ProposalConflict
 from app.services.allocations import AllocationService, choose_gpus, get_availability
 from app.services.proposals import ProposalService
 from mysql_audit import snapshot
@@ -179,3 +180,19 @@ def test_legacy_original_allocation_is_replayed_without_backfill(db):
     final = service.finish(identifier)
     assert final.status == 'COMPLETED' and final.basis is None
     assert execute(db, 'SELECT allocation_id FROM allocation_bases WHERE allocation_id=%s', (identifier,)) == []
+
+
+def test_accept_allocate_then_same_accept_replays_and_new_alternatives_are_refused(db):
+    # F1: accept -> allocate -> same accept again returns the stored response.
+    proposal, response = accept(db)
+    AllocationService(RollbackEnvelope(db)).allocate_proposal(3, proposal.proposal_id, 2)
+    proposals = ProposalService(RollbackEnvelope(db))
+    before = snapshot(db, 'v0.3-2')
+    replay = proposals.respond(3, proposal.proposal_id, 2, 'ACCEPTED')
+    assert replay.replayed and replay.response_id == response.response_id
+    assert replay.responded_at == response.responded_at
+    with pytest.raises(ProposalConflict, match='배정 이력'):
+        proposals.generate(3)
+    assert snapshot(db, 'v0.3-2') == before
+    other = next(p for p in proposals.list_for_job(3) if p.proposal.proposal_id != proposal.proposal_id)
+    assert proposals.respond(3, other.proposal.proposal_id, 2, 'REJECTED').decision == 'REJECTED'

@@ -95,6 +95,10 @@ def service():
     return service
 
 
+def call_order(repo, names):
+    return [call[0] for call in repo.mock_calls if call[0] in names]
+
+
 def test_acceptance_is_intent_without_any_allocation_or_resource_recheck(service):
     assert service.respond(1, 7, 1, "ACCEPTED").decision == "ACCEPTED"
     service.repository.create_response.assert_called_once()
@@ -156,3 +160,65 @@ def test_invalid_decision_is_rejected_before_any_transaction(service):
     with pytest.raises(ProposalConflict):
         service.respond(1, 7, 1, "MAYBE")
     service.connection.start_transaction.assert_not_called()
+
+
+# F1: a Job with any allocation history (ACTIVE, COMPLETED or FAILED) has used
+# its single execution. New alternatives or new acceptances would be consent
+# records that can never be executed, so they are refused without any write.
+
+def test_generate_refuses_job_with_allocation_history_after_model_and_job_locks(service):
+    service.repository.has_allocation_history.return_value = True
+    with pytest.raises(ProposalConflict, match="배정 이력"):
+        service.generate(1)
+    service.repository.has_allocation_history.assert_called_once_with(1)
+    assert call_order(service.repository, ("lock_request", "lock_inventory", "has_allocation_history")) == [
+        "lock_request", "lock_inventory", "has_allocation_history"]
+    service.repository.find_conditions.assert_not_called()
+    service.repository.create_proposal.assert_not_called()
+    service.connection.rollback.assert_called_once()
+    service.connection.commit.assert_not_called()
+
+
+def test_generate_without_allocation_history_still_creates_proposals(service):
+    repo = service.repository
+    repo.lock_inventory.return_value = (gpu(1), gpu(2), gpu(3), gpu(4, server=2))
+    repo.occupied_gpu_ids.return_value = ()
+    repo.find_conditions.return_value = None
+    repo.create_proposal.return_value = 7
+    result = service.generate(1)
+    assert result.status == "PROPOSALS_AVAILABLE" and result.proposals
+    repo.has_allocation_history.assert_called_once_with(1)
+    assert repo.create_proposal.call_count == 2
+    service.connection.commit.assert_called_once()
+
+
+def test_new_acceptance_refused_for_job_with_allocation_history(service):
+    service.repository.has_allocation_history.return_value = True
+    with pytest.raises(ProposalConflict, match="배정 이력"):
+        service.respond(1, 7, 1, "ACCEPTED")
+    assert call_order(service.repository, ("lock_request", "get_proposal", "response_for", "accepted_for_job",
+                                           "has_allocation_history")) == [
+        "lock_request", "get_proposal", "response_for", "accepted_for_job", "has_allocation_history"]
+    service.repository.create_response.assert_not_called()
+    service.connection.rollback.assert_called_once()
+    service.connection.commit.assert_not_called()
+
+
+def test_new_rejection_is_still_recorded_for_job_with_allocation_history(service):
+    service.repository.has_allocation_history.return_value = True
+    service.repository.create_response.return_value = CustomerResponse(9, 7, 1, 1, "REJECTED", datetime(2026, 11, 8))
+    assert service.respond(1, 7, 1, "REJECTED").decision == "REJECTED"
+    service.repository.create_response.assert_called_once()
+    service.connection.commit.assert_called_once()
+
+
+@pytest.mark.parametrize("decision", ["ACCEPTED", "REJECTED"])
+def test_existing_response_still_replays_after_allocation(service, decision):
+    # accept -> allocate -> same accept again must return the stored response.
+    service.repository.has_allocation_history.return_value = True
+    original = replace(service.repository.create_response.return_value, decision=decision)
+    service.repository.response_for.return_value = original
+    replay = service.respond(1, 7, 1, decision)
+    assert replay.replayed and replace(replay, replayed=False) == original
+    service.repository.create_response.assert_not_called()
+    service.connection.commit.assert_called_once()

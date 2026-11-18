@@ -10,6 +10,7 @@ from app.db import DatabaseOperationError
 from app.proposal import CustomerMismatch, ProposalConflict, ProposalNotFound
 from app.services.allocations import AllocationService, get_availability
 from app.services.proposals import ProposalService
+from database.inspect_schema import inspect
 from mysql_audit import snapshot
 from proposal_helpers import proposal_case
 
@@ -242,3 +243,59 @@ def test_database_rejects_missing_proposal_parents(proposal_case, field):
         execute(case["db"], "INSERT INTO job_proposals (" + ", ".join(fields) + ") VALUES (" +
                 ", ".join(["%s"] * len(fields)) + ")", tuple(fields.values()))
     assert error.value.errno in (1216, 1452)
+
+
+# F1 regression: one execution per Job. Once any allocation exists (ACTIVE,
+# COMPLETED or FAILED), new alternatives and new ACCEPTED responses would be
+# consent that can never be executed. They are refused without any row change.
+
+def allocated_job(case, status):
+    """A private 4-GPU distributed Job with one allocation in the given state.
+
+    Inventory is 3 + 2 GPUs. For ended allocations a second private Job keeps
+    2 GPUs busy, so the original stays short and alternatives would otherwise
+    be generated (that is the behaviour the fix must refuse).
+    """
+    allocations = AllocationService(RollbackEnvelope(case["db"]))
+    job = case["new_job"](4)
+    record = allocations.allocate(job)
+    if status != "ACTIVE":
+        allocations.finish(record.allocation_id, status)
+        allocations.allocate(case["new_job"](2))
+    return job
+
+
+@pytest.mark.parametrize("status", ["ACTIVE", "COMPLETED", "FAILED"])
+def test_generation_is_refused_for_job_with_allocation_history(proposal_case, status):
+    case = proposal_case
+    job = allocated_job(case, status)
+    assert get_availability(case["service"].repository, job).status == "INSUFFICIENT_RESOURCES"
+    version = inspect(case["db"])["schema_version"]
+    before = snapshot(case["db"], version)
+    with pytest.raises(ProposalConflict, match="배정 이력"):
+        case["service"].generate(job)
+    assert snapshot(case["db"], version) == before
+    assert case["service"].list_for_job(job) == ()
+
+
+@pytest.mark.parametrize("status", ["ACTIVE", "COMPLETED", "FAILED"])
+def test_stale_proposal_cannot_be_accepted_after_original_execution_but_can_be_rejected(proposal_case, status):
+    case = proposal_case
+    service, db = case["service"], case["db"]
+    allocations = AllocationService(RollbackEnvelope(db))
+    blocker = allocations.allocate(case["new_job"](2))
+    job = case["new_job"](4)
+    (proposal,) = service.generate(job).proposals          # reduced to the 3 free GPUs
+    allocations.finish(blocker.allocation_id)
+    record = allocations.allocate(job)                       # original now runs on 4 GPUs
+    if status != "ACTIVE":
+        allocations.finish(record.allocation_id, status)
+    version = inspect(db)["schema_version"]
+    before = snapshot(db, version)
+    with pytest.raises(ProposalConflict, match="배정 이력"):
+        service.respond(job, proposal.proposal_id, case["customer"], "ACCEPTED")
+    assert snapshot(db, version) == before
+    rejected = service.respond(job, proposal.proposal_id, case["customer"], "REJECTED")
+    assert rejected.decision == "REJECTED" and not rejected.replayed
+    assert service.respond(job, proposal.proposal_id, case["customer"], "REJECTED").replayed
+    assert service.history(job) == (rejected,)
